@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaitToUnlock — PIN aleatorio oculto para Screen Time</title>
+  <meta name="description" content="Generá un PIN aleatorio para Screen Time de iOS sin verlo, copialo al portapapeles, y revelalo solo cuando se cumpla la condición.">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="container">
+    <header class="hero">
+      <h1>WaitToUnlock</h1>
+      <p class="subtitle">
+        Generá un PIN aleatorio para Screen Time sin verlo nunca, copialo directo al portapapeles,
+        y configurá cuándo se puede revelar.
+      </p>
+    </header>
+
+    <section class="card">
+      <h2>1. Generar PIN oculto</h2>
+      <div class="form-row">
+        <label for="pin-length">Longitud</label>
+        <select id="pin-length">
+          <option value="4" selected>4 dígitos (Screen Time clásico)</option>
+          <option value="6">6 dígitos</option>
+        </select>
+      </div>
+      <button id="generate-btn" class="btn btn-primary">Generar y copiar al portapapeles</button>
+      <p id="generate-status" class="status" aria-live="polite" role="status"></p>
+      <details class="hint-block">
+        <summary>Cómo lo uso en iOS</summary>
+        <ol>
+          <li>Tocá <strong>Generar y copiar</strong> (el PIN no se ve, queda solo en el portapapeles).</li>
+          <li>En el iPhone: <em>Configuración → Tiempo en Pantalla → Cambiar código de Tiempo en Pantalla → Cambiar código de Tiempo en Pantalla</em>.</li>
+          <li>Mantené presionado el primer casillero del código nuevo y elegí <strong>Pegar</strong>. Repetilo en la confirmación.</li>
+          <li>Volvé acá y, si querés, guardá el PIN bloqueado para recuperarlo más adelante.</li>
+        </ol>
+      </details>
+    </section>
+
+    <section class="card" id="save-section" hidden>
+      <h2>2. Bloquear hasta...</h2>
+      <p class="muted">El PIN recién generado todavía vive solo en memoria. Si lo guardás, podrás recuperarlo cuando se cumpla la condición.</p>
+
+      <div class="form-row">
+        <label for="pin-label">Etiqueta (opcional)</label>
+        <input type="text" id="pin-label" placeholder="Ej: PIN principal" maxlength="40" autocomplete="off">
+      </div>
+
+      <div class="form-row">
+        <label>Atajos</label>
+        <div class="presets">
+          <button type="button" class="btn btn-chip" data-preset="900000">+15 min</button>
+          <button type="button" class="btn btn-chip" data-preset="3600000">+1 hora</button>
+          <button type="button" class="btn btn-chip" data-preset="14400000">+4 horas</button>
+          <button type="button" class="btn btn-chip" data-preset="86400000">+1 día</button>
+          <button type="button" class="btn btn-chip" data-preset="259200000">+3 días</button>
+          <button type="button" class="btn btn-chip" data-preset="604800000">+7 días</button>
+          <button type="button" class="btn btn-chip" data-preset="2592000000">+30 días</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="unlock-at">Fecha y hora exactas de desbloqueo</label>
+        <input type="datetime-local" id="unlock-at">
+      </div>
+
+      <div class="form-row">
+        <label class="checkbox-row">
+          <input type="checkbox" id="require-confirm" checked>
+          <span>Pedir confirmación al revelar o copiar</span>
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="save-btn" class="btn btn-primary">Guardar PIN bloqueado</button>
+        <button id="discard-btn" class="btn btn-ghost">Descartar (ya lo pegué)</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>PINs guardados</h2>
+      <p id="empty-state" class="muted">Todavía no guardaste ningún PIN bloqueado.</p>
+      <ul id="pin-list" class="pin-list"></ul>
+      <div class="actions" id="bulk-actions" hidden>
+        <button id="clear-clipboard-btn" class="btn btn-ghost">Limpiar portapapeles</button>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p>
+        <strong>100% local.</strong> Nada sale de tu navegador: los PINs se guardan ofuscados en
+        <code>localStorage</code>. Esta app es voluntaria: si abrís las herramientas de desarrollador
+        podés leer el contenido. El bloqueo es contra vos mismo, no contra un atacante.
+      </p>
+      <p class="muted">
+        Aleatoriedad criptográfica vía <code>crypto.getRandomValues</code>.
+      </p>
+    </footer>
+  </main>
+
+  <template id="pin-item-template">
+    <li class="pin-item">
+      <div class="pin-meta">
+        <div class="pin-label"></div>
+        <div class="pin-sub">
+          <span class="pin-length"></span>
+          <span class="pin-sep">·</span>
+          <span class="pin-unlock-at"></span>
+        </div>
+        <div class="pin-status"></div>
+      </div>
+      <div class="pin-revealed" hidden></div>
+      <div class="pin-actions">
+        <button type="button" class="btn btn-secondary action-reveal">Revelar</button>
+        <button type="button" class="btn btn-secondary action-copy">Copiar</button>
+        <button type="button" class="btn btn-ghost action-delete">Eliminar</button>
+      </div>
+    </li>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
