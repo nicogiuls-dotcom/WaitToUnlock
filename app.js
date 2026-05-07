@@ -11,7 +11,7 @@ const $ = (id) => document.getElementById(id);
 let _enginePromise = null;
 function loadEngine() {
   if (!_enginePromise) {
-    _enginePromise = import('./crypto-engine.js?v=20260507e').catch((err) => {
+    _enginePromise = import('./crypto-engine.js?v=20260507f').catch((err) => {
       _enginePromise = null;
       throw err;
     });
@@ -22,7 +22,7 @@ function loadEngine() {
 let _qrPromise = null;
 function loadQrLib() {
   if (!_qrPromise) {
-    _qrPromise = import('https://esm.sh/qrcode@1.5.3')
+    _qrPromise = import('./vendor/qrcode.js')
       .then((m) => m.default)
       .catch((err) => {
         _qrPromise = null;

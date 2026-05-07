@@ -1,6 +1,5 @@
-/* Static loader for tlock-js. Lives in its own file so that if the
-   esm.sh fetch fails, only this dynamic-imported module rejects —
-   the main app stays alive and can surface a friendly error. */
+/* Static loader for tlock-js. Imports from a local bundle so the
+   app no longer depends on any third-party CDN at runtime. */
 import {
   timelockEncrypt,
   timelockDecrypt,
@@ -8,7 +7,7 @@ import {
   HttpCachingChain,
   roundAt,
   Buffer,
-} from 'https://esm.sh/tlock-js@0.9.0';
+} from './vendor/tlock-js.js';
 
 const QUICKNET_CHAIN_INFO = {
   public_key:
