@@ -96,6 +96,10 @@ body {
 
 button { -webkit-tap-highlight-color: transparent; }
 
+/* The HTML [hidden] attribute is the canonical way to toggle visibility.
+   Force it to win against any class-level display rule below. */
+[hidden] { display: none !important; }
+
 a { color: var(--primary); text-decoration: none; }
 a:hover, a:focus-visible { text-decoration: underline; }
 
@@ -237,7 +241,6 @@ a:hover, a:focus-visible { text-decoration: underline; }
   flex: 1;
 }
 
-.view[hidden] { display: none; }
 
 .view-header {
   display: flex;
