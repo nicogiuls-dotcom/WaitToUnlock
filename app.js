@@ -4,10 +4,12 @@ import {
   HttpChainClient,
   HttpCachingChain,
   roundAt,
-  roundTime,
   Buffer,
 } from 'https://esm.sh/tlock-js@0.9.0';
 
+/* =========================================================
+   Constants
+   ========================================================= */
 const STORE_KEY = 'wtu.pins.v2';
 const REVEAL_TIMEOUT_MS = 30_000;
 const $ = (id) => document.getElementById(id);
@@ -28,19 +30,27 @@ const QUICKNET_URL =
 const drandChain = new HttpCachingChain(QUICKNET_URL, QUICKNET_CHAIN_INFO);
 const drandClient = new HttpChainClient(drandChain);
 
-let pendingPin = null;
+/* =========================================================
+   State
+   ========================================================= */
+const state = {
+  selectedLength: 4,
+  selectedPresetMs: 60 * 60 * 1000,
+  customUnlockMs: null,
+  successData: null,
+  successCountdownTimer: null,
+};
+
 const revealTimers = new Map();
 
-/* =========================
-   Utilities
-   ========================= */
+/* =========================================================
+   Crypto / utilities
+   ========================================================= */
 function generatePin(length) {
   const buf = new Uint32Array(length);
   crypto.getRandomValues(buf);
   let pin = '';
-  for (let i = 0; i < length; i++) {
-    pin += (buf[i] % 10).toString();
-  }
+  for (let i = 0; i < length; i++) pin += (buf[i] % 10).toString();
   return pin;
 }
 
@@ -68,9 +78,7 @@ function loadPins() {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 function savePins(pins) {
@@ -96,10 +104,10 @@ function formatRemaining(ms) {
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (d > 0) return `Faltan ${d}d ${h}h ${m}m`;
-  if (h > 0) return `Faltan ${h}h ${m}m`;
-  if (m > 0) return `Faltan ${m}m ${sec}s`;
-  return `Faltan ${sec}s`;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
 }
 
 function formatUnlockDate(ts) {
@@ -116,59 +124,6 @@ function formatUnlockDate(ts) {
   return d.toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-/* =========================
-   Status / toast / dialogs
-   ========================= */
-function setStatus(kind, msg) {
-  const el = $('generate-status');
-  el.className = `status ${kind}`;
-  el.textContent = msg;
-}
-
-function clearStatus() {
-  const el = $('generate-status');
-  el.className = 'status';
-  el.textContent = '';
-}
-
-let toastTimer = null;
-function toast(message) {
-  const el = $('toast');
-  el.textContent = message;
-  el.hidden = false;
-  requestAnimationFrame(() => el.classList.add('is-visible'));
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    el.classList.remove('is-visible');
-    setTimeout(() => { el.hidden = true; }, 220);
-  }, 2400);
-}
-
-function confirmDialog(message) {
-  return new Promise((resolve) => {
-    const dialog = $('confirm-dialog');
-    $('confirm-message').textContent = message;
-    const yesBtn = $('confirm-yes-btn');
-    const noBtn = $('confirm-no-btn');
-
-    const cleanup = () => {
-      yesBtn.removeEventListener('click', onYes);
-      noBtn.removeEventListener('click', onNo);
-      dialog.removeEventListener('cancel', onNo);
-    };
-    const onYes = () => { cleanup(); dialog.close(); resolve(true); };
-    const onNo = (e) => { if (e) e.preventDefault?.(); cleanup(); dialog.close(); resolve(false); };
-
-    yesBtn.addEventListener('click', onYes);
-    noBtn.addEventListener('click', onNo);
-    dialog.addEventListener('cancel', onNo);
-    dialog.showModal();
-  });
-}
-
-/* =========================
-   Crypto wrappers
-   ========================= */
 function roundForUnlockTime(unlockMs) {
   return roundAt(unlockMs, QUICKNET_CHAIN_INFO) + 1;
 }
@@ -195,15 +150,202 @@ function describeDrandError(err) {
   return 'Algo salió mal al abrir la caja. Probá de nuevo.';
 }
 
-/* =========================
-   Render
-   ========================= */
-function renderPins() {
+/* =========================================================
+   Toast / dialogs
+   ========================================================= */
+let toastTimer = null;
+function toast(message) {
+  const el = $('toast');
+  el.textContent = message;
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('is-visible'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    el.classList.remove('is-visible');
+    setTimeout(() => { el.hidden = true; }, 220);
+  }, 2400);
+}
+
+function confirmDialog(message) {
+  return new Promise((resolve) => {
+    const dialog = $('confirm-dialog');
+    $('confirm-message').textContent = message;
+    const yesBtn = $('confirm-yes-btn');
+    const noBtn = $('confirm-no-btn');
+
+    const cleanup = () => {
+      yesBtn.removeEventListener('click', onYes);
+      noBtn.removeEventListener('click', onNo);
+      dialog.removeEventListener('cancel', onNo);
+    };
+    const onYes = () => { cleanup(); dialog.close(); resolve(true); };
+    const onNo = (e) => { e?.preventDefault?.(); cleanup(); dialog.close(); resolve(false); };
+
+    yesBtn.addEventListener('click', onYes);
+    noBtn.addEventListener('click', onNo);
+    dialog.addEventListener('cancel', onNo);
+    dialog.showModal();
+  });
+}
+
+/* =========================================================
+   Routing (simple two-view)
+   ========================================================= */
+function showView(name) {
+  document.querySelectorAll('.view').forEach((el) => {
+    el.hidden = el.id !== `view-${name}`;
+  });
+  $('nav-vault').classList.toggle('is-active', name === 'vault');
+  if (name === 'vault') renderVault();
+  if (name === 'create') resetCreateForm();
+  window.scrollTo({ top: 0, behavior: 'instant' });
+}
+
+/* =========================================================
+   Create view
+   ========================================================= */
+function getSelectedUnlockMs() {
+  const customStr = $('unlock-at').value;
+  if (customStr) {
+    const t = new Date(customStr).getTime();
+    if (Number.isFinite(t) && t > Date.now()) return t;
+  }
+  return Date.now() + state.selectedPresetMs;
+}
+
+function resetCreateForm() {
+  $('create-form').hidden = false;
+  $('create-success').hidden = true;
+  if (state.successCountdownTimer) {
+    clearInterval(state.successCountdownTimer);
+    state.successCountdownTimer = null;
+  }
+  state.successData = null;
+}
+
+function selectLength(length) {
+  state.selectedLength = length;
+  document.querySelectorAll('.segment-btn').forEach((b) => {
+    const isMatch = parseInt(b.dataset.length, 10) === length;
+    b.classList.toggle('is-selected', isMatch);
+    b.setAttribute('aria-checked', isMatch ? 'true' : 'false');
+  });
+}
+
+function selectPreset(ms) {
+  state.selectedPresetMs = ms;
+  state.customUnlockMs = null;
+  $('unlock-at').value = '';
+  document.querySelectorAll('.btn-chip[data-preset]').forEach((b) => {
+    const isMatch = parseInt(b.dataset.preset, 10) === ms;
+    b.classList.toggle('is-selected', isMatch);
+    b.setAttribute('aria-checked', isMatch ? 'true' : 'false');
+  });
+}
+
+function clearPresetSelection() {
+  state.selectedPresetMs = null;
+  document.querySelectorAll('.btn-chip[data-preset]').forEach((b) => {
+    b.classList.remove('is-selected');
+    b.setAttribute('aria-checked', 'false');
+  });
+}
+
+async function handleCreate() {
+  const unlockAt = getSelectedUnlockMs();
+  if (!Number.isFinite(unlockAt) || unlockAt <= Date.now()) {
+    toast('Elegí cuándo poder abrirlo.');
+    return;
+  }
+
+  const length = state.selectedLength;
+  const pin = generatePin(length);
+
+  const btn = $('create-btn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Creando…';
+
+  try {
+    await copyToClipboard(pin);
+  } catch {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    toast('No pude copiar al portapapeles. Probá desde HTTPS.');
+    return;
+  }
+
+  let encrypted;
+  try {
+    encrypted = await tlockEncryptPin(pin, unlockAt);
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = originalText;
+    toast(describeDrandError(err));
+    return;
+  }
+
+  const pins = loadPins();
+  pins.push({
+    id: newId(),
+    label: $('pin-label').value.trim(),
+    ciphertext: encrypted.ciphertext,
+    round: encrypted.round,
+    length,
+    unlockAt,
+    requireConfirm: $('require-confirm').checked,
+    createdAt: Date.now(),
+  });
+  savePins(pins);
+
+  btn.disabled = false;
+  btn.textContent = originalText;
+
+  showSuccess({ length, unlockAt });
+  updateVaultBadge();
+  $('pin-label').value = '';
+}
+
+function showSuccess({ unlockAt }) {
+  state.successData = { unlockAt };
+  $('create-form').hidden = true;
+  $('create-success').hidden = false;
+  $('success-when').textContent = formatUnlockDate(unlockAt);
+
+  if (state.successCountdownTimer) clearInterval(state.successCountdownTimer);
+  const tick = () => {
+    const remaining = unlockAt - Date.now();
+    $('success-countdown').textContent = remaining > 0 ? formatRemaining(remaining) : 'Disponible';
+    if (remaining <= 0 && state.successCountdownTimer) {
+      clearInterval(state.successCountdownTimer);
+      state.successCountdownTimer = null;
+    }
+  };
+  tick();
+  state.successCountdownTimer = setInterval(tick, 1000);
+}
+
+/* =========================================================
+   Vault view
+   ========================================================= */
+function updateVaultBadge() {
+  const count = loadPins().length;
+  const badge = $('vault-count');
+  if (count > 0) {
+    badge.textContent = String(count);
+    badge.hidden = false;
+  } else {
+    badge.textContent = '';
+    badge.hidden = true;
+  }
+}
+
+function renderVault() {
   const list = $('pin-list');
   const pins = loadPins().sort((a, b) => a.unlockAt - b.unlockAt);
   const now = Date.now();
 
-  // Preserve which items are currently revealed so we don't wipe the value on tick re-render.
+  // Preserve revealed values
   const previouslyRevealed = new Map();
   list.querySelectorAll('.pin-item').forEach((node) => {
     const slot = node.querySelector('.pin-revealed');
@@ -213,15 +355,9 @@ function renderPins() {
   });
 
   list.innerHTML = '';
-
   $('empty-state').hidden = pins.length > 0;
-  $('export-btn').disabled = pins.length === 0;
-
-  const badge = $('pin-count');
-  badge.textContent = pins.length > 0 ? String(pins.length) : '';
 
   const tpl = $('pin-item-template');
-
   for (const p of pins) {
     const node = tpl.content.firstElementChild.cloneNode(true);
     node.dataset.id = p.id;
@@ -232,7 +368,6 @@ function renderPins() {
     const unlocked = now >= p.unlockAt;
     const pill = node.querySelector('.pin-status-pill');
     const countdown = node.querySelector('.pin-countdown');
-
     if (unlocked) {
       pill.className = 'pin-status-pill unlocked';
       pill.textContent = 'Lista para abrir';
@@ -240,15 +375,12 @@ function renderPins() {
     } else {
       pill.className = 'pin-status-pill locked';
       pill.textContent = 'Bloqueado';
-      countdown.textContent = formatRemaining(p.unlockAt - now);
+      countdown.textContent = `Faltan ${formatRemaining(p.unlockAt - now)}`;
     }
 
-    const revealBtn = node.querySelector('.action-reveal');
-    const copyBtn = node.querySelector('.action-copy');
-    revealBtn.disabled = !unlocked;
-    copyBtn.disabled = !unlocked;
+    node.querySelector('.action-reveal').disabled = !unlocked;
+    node.querySelector('.action-copy').disabled = !unlocked;
 
-    // If this pin was being shown before re-render, restore it.
     if (previouslyRevealed.has(p.id)) {
       const slot = node.querySelector('.pin-revealed');
       slot.hidden = false;
@@ -259,90 +391,10 @@ function renderPins() {
   }
 }
 
-/* =========================
-   Export / Import
-   ========================= */
-function exportPins() {
-  const pins = loadPins();
-  if (pins.length === 0) {
-    toast('No hay PINs para respaldar.');
-    return;
-  }
-  const payload = {
-    app: 'waittounlock',
-    version: 2,
-    exportedAt: Date.now(),
-    pins,
-  };
-  const json = JSON.stringify(payload, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  const date = new Date().toISOString().slice(0, 10);
-  a.href = url;
-  a.download = `waittounlock-respaldo-${date}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  copyToClipboard(json)
-    .then(() => toast(`Respaldo descargado y copiado (${pins.length} PIN${pins.length !== 1 ? 's' : ''}).`))
-    .catch(() => toast(`Respaldo descargado (${pins.length} PIN${pins.length !== 1 ? 's' : ''}).`));
-}
-
-function importPinsFromJson(jsonStr) {
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch {
-    return { ok: false, error: 'El contenido no es un JSON válido.' };
-  }
-
-  let incoming;
-  if (Array.isArray(parsed)) {
-    incoming = parsed;
-  } else if (parsed && Array.isArray(parsed.pins)) {
-    incoming = parsed.pins;
-  } else {
-    return { ok: false, error: 'No encontré PINs en el archivo.' };
-  }
-
-  const valid = incoming.filter(
-    (p) => p && typeof p.id === 'string' && typeof p.ciphertext === 'string' && Number.isFinite(p.unlockAt)
-  );
-  if (valid.length === 0) {
-    return { ok: false, error: 'El archivo no tiene PINs con el formato correcto.' };
-  }
-
-  const existing = loadPins();
-  const existingIds = new Set(existing.map((p) => p.id));
-
-  let added = 0;
-  let skipped = 0;
-  for (const p of valid) {
-    if (existingIds.has(p.id)) { skipped++; continue; }
-    existing.push({
-      id: p.id,
-      label: typeof p.label === 'string' ? p.label : '',
-      ciphertext: p.ciphertext,
-      round: Number.isFinite(p.round) ? p.round : 0,
-      length: Number.isFinite(p.length) ? p.length : 4,
-      unlockAt: p.unlockAt,
-      requireConfirm: p.requireConfirm !== false,
-      createdAt: Number.isFinite(p.createdAt) ? p.createdAt : Date.now(),
-    });
-    added++;
-  }
-
-  savePins(existing);
-  return { ok: true, added, skipped };
-}
-
-/* =========================
+/* =========================================================
    Reveal lifecycle
-   ========================= */
-function scheduleAutoHide(itemEl, id) {
+   ========================================================= */
+function scheduleAutoHide(id) {
   clearAutoHide(id);
   const timer = setTimeout(() => {
     const node = document.querySelector(`.pin-item[data-id="${id}"]`);
@@ -364,133 +416,206 @@ function clearAutoHide(id) {
   }
 }
 
-/* =========================
-   Step indicator
-   ========================= */
-function setStep(n) {
-  document.querySelectorAll('.stepper-item').forEach((el, i) => {
-    el.classList.toggle('is-active', i === n - 1);
-  });
-}
-
-/* =========================
-   Preset chips
-   ========================= */
-function clearChipSelection() {
-  document.querySelectorAll('.btn-chip').forEach((b) => b.classList.remove('is-selected'));
-}
-
-/* =========================
-   Event handlers
-   ========================= */
-$('generate-btn').addEventListener('click', async () => {
-  const length = parseInt($('pin-length').value, 10) || 4;
-  const pin = generatePin(length);
-  try {
-    await copyToClipboard(pin);
-  } catch {
-    pendingPin = null;
-    setStatus(
-      'error',
-      'No pude copiar al portapapeles. Probá de nuevo, o abrí la app desde una conexión segura (https).'
-    );
-    return;
-  }
-  pendingPin = { value: pin, length };
-  setStatus(
-    'success',
-    `Listo. Tu PIN de ${length} dígitos está copiado y nadie lo vio (ni vos). Pegalo ahora en Tiempo en Pantalla.`
-  );
-
-  setStep(2);
-  $('save-section').hidden = false;
-  $('unlock-at').value = toLocalInput(new Date(Date.now() + 60 * 60 * 1000));
-  clearChipSelection();
-  $('save-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
-});
-
-document.querySelectorAll('.btn-chip[data-preset]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const ms = parseInt(btn.dataset.preset, 10);
-    $('unlock-at').value = toLocalInput(new Date(Date.now() + ms));
-    clearChipSelection();
-    btn.classList.add('is-selected');
-  });
-});
-
-$('unlock-at').addEventListener('input', clearChipSelection);
-
-$('save-btn').addEventListener('click', async () => {
-  if (!pendingPin) {
-    setStatus('error', 'No hay un PIN pendiente. Creá uno primero.');
-    return;
-  }
-  const unlockStr = $('unlock-at').value;
-  if (!unlockStr) {
-    toast('Elegí cuándo se abre la caja.');
-    return;
-  }
-  const unlockAt = new Date(unlockStr).getTime();
-  if (!Number.isFinite(unlockAt)) {
-    toast('La fecha no es válida.');
-    return;
-  }
-  if (unlockAt <= Date.now()) {
-    toast('Elegí una fecha en el futuro.');
-    return;
-  }
-
-  const saveBtn = $('save-btn');
-  const originalText = saveBtn.textContent;
-  saveBtn.disabled = true;
-  saveBtn.textContent = 'Cerrando la caja...';
-
-  let encrypted;
-  try {
-    encrypted = await tlockEncryptPin(pendingPin.value, unlockAt);
-  } catch (err) {
-    saveBtn.disabled = false;
-    saveBtn.textContent = originalText;
-    setStatus('error', describeDrandError(err));
-    return;
-  }
-
+/* =========================================================
+   Export / Import (file)
+   ========================================================= */
+function exportPins() {
   const pins = loadPins();
-  pins.push({
-    id: newId(),
-    label: $('pin-label').value.trim(),
-    ciphertext: encrypted.ciphertext,
-    round: encrypted.round,
-    length: pendingPin.length,
-    unlockAt,
-    requireConfirm: $('require-confirm').checked,
-    createdAt: Date.now(),
-  });
-  savePins(pins);
+  if (pins.length === 0) {
+    toast('No hay PINs para respaldar.');
+    return;
+  }
+  const payload = { app: 'waittounlock', version: 2, exportedAt: Date.now(), pins };
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `waittounlock-respaldo-${date}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  copyToClipboard(json)
+    .then(() => toast(`Respaldo descargado y copiado (${pins.length} PIN${pins.length !== 1 ? 's' : ''}).`))
+    .catch(() => toast(`Respaldo descargado (${pins.length} PIN${pins.length !== 1 ? 's' : ''}).`));
+}
 
-  pendingPin = null;
-  $('save-section').hidden = true;
-  $('pin-label').value = '';
-  saveBtn.disabled = false;
-  saveBtn.textContent = originalText;
-  setStep(1);
-  setStatus(
-    'info',
-    `Guardado. La caja se abre sola ${formatUnlockDate(unlockAt)}. Hasta entonces, ni vos podés mirar adentro. ` +
-      `Asegurate de que ya pegaste el PIN en Tiempo en Pantalla.`
+function importPinsFromJson(jsonStr) {
+  let parsed;
+  try { parsed = JSON.parse(jsonStr); } catch {
+    return { ok: false, error: 'El contenido no es un JSON válido.' };
+  }
+  let incoming;
+  if (Array.isArray(parsed)) incoming = parsed;
+  else if (parsed && Array.isArray(parsed.pins)) incoming = parsed.pins;
+  else if (parsed && typeof parsed.id === 'string') incoming = [parsed];
+  else return { ok: false, error: 'No encontré PINs en el archivo.' };
+
+  const valid = incoming.filter(
+    (p) => p && typeof p.id === 'string' && typeof p.ciphertext === 'string' && Number.isFinite(p.unlockAt)
   );
-  renderPins();
-  toast('PIN guardado en la caja fuerte');
+  if (valid.length === 0) return { ok: false, error: 'El archivo no tiene PINs con el formato correcto.' };
+
+  const existing = loadPins();
+  const existingIds = new Set(existing.map((p) => p.id));
+  let added = 0, skipped = 0;
+  for (const p of valid) {
+    if (existingIds.has(p.id)) { skipped++; continue; }
+    existing.push({
+      id: p.id,
+      label: typeof p.label === 'string' ? p.label : '',
+      ciphertext: p.ciphertext,
+      round: Number.isFinite(p.round) ? p.round : 0,
+      length: Number.isFinite(p.length) ? p.length : 4,
+      unlockAt: p.unlockAt,
+      requireConfirm: p.requireConfirm !== false,
+      createdAt: Number.isFinite(p.createdAt) ? p.createdAt : Date.now(),
+    });
+    added++;
+  }
+  savePins(existing);
+  return { ok: true, added, skipped };
+}
+
+/* =========================================================
+   QR transfer
+   ========================================================= */
+function buildShareUrl(pin) {
+  const minimal = {
+    id: pin.id,
+    label: pin.label,
+    ciphertext: pin.ciphertext,
+    round: pin.round,
+    length: pin.length,
+    unlockAt: pin.unlockAt,
+    requireConfirm: pin.requireConfirm,
+    createdAt: pin.createdAt,
+  };
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(minimal))));
+  const base = `${window.location.origin}${window.location.pathname}`;
+  return `${base}#i=${encoded}`;
+}
+
+let qrLib = null;
+async function loadQrLib() {
+  if (qrLib) return qrLib;
+  qrLib = (await import('https://esm.sh/qrcode@1.5.3')).default;
+  return qrLib;
+}
+
+async function openShareDialog(pinId) {
+  const pin = loadPins().find((p) => p.id === pinId);
+  if (!pin) return;
+  const url = buildShareUrl(pin);
+  $('qr-canvas').innerHTML = '';
+  $('qr-loading').hidden = false;
+  $('qr-dialog').showModal();
+
+  try {
+    const QR = await loadQrLib();
+    const svg = await QR.toString(url, {
+      type: 'svg',
+      errorCorrectionLevel: 'L',
+      margin: 0,
+      color: { dark: '#0e1218', light: '#ffffff' },
+    });
+    $('qr-canvas').innerHTML = svg;
+    $('qr-loading').hidden = true;
+  } catch (err) {
+    $('qr-canvas').innerHTML = '';
+    $('qr-loading').textContent = 'No pude generar el QR.';
+  }
+
+  $('qr-copy-link-btn').onclick = async () => {
+    try {
+      await copyToClipboard(url);
+      toast('Enlace copiado');
+    } catch {
+      toast('No se pudo copiar');
+    }
+  };
+}
+
+/* =========================================================
+   Deep-link import (hash fragment)
+   ========================================================= */
+async function handleDeepLinkImport() {
+  const hash = window.location.hash;
+  if (!hash.startsWith('#i=')) return;
+  let payload;
+  try {
+    payload = decodeURIComponent(escape(atob(hash.slice(3))));
+  } catch {
+    history.replaceState(null, '', window.location.pathname);
+    return;
+  }
+  // Clear hash so refresh doesn't re-prompt
+  history.replaceState(null, '', window.location.pathname);
+
+  const ok = await confirmDialog(
+    '¿Querés agregar este PIN compartido a tu caja fuerte? (No se puede abrir hasta su fecha.)'
+  );
+  if (!ok) return;
+
+  const result = importPinsFromJson(payload);
+  if (!result.ok) {
+    toast(result.error);
+    return;
+  }
+  if (result.added > 0) {
+    toast(`PIN agregado a tu caja fuerte`);
+    updateVaultBadge();
+    showView('vault');
+  } else if (result.skipped > 0) {
+    toast('Ya tenías ese PIN guardado.');
+  }
+}
+
+/* =========================================================
+   Event binding
+   ========================================================= */
+// Length segment
+document.querySelectorAll('.segment-btn').forEach((b) => {
+  b.addEventListener('click', () => selectLength(parseInt(b.dataset.length, 10)));
 });
 
-$('discard-btn').addEventListener('click', () => {
-  pendingPin = null;
-  $('save-section').hidden = true;
-  $('pin-label').value = '';
-  setStep(1);
-  setStatus('info', 'Ok, no lo guardamos. Si ya lo pegaste en Tiempo en Pantalla, todo bien.');
+// Presets
+document.querySelectorAll('.btn-chip[data-preset]').forEach((b) => {
+  b.addEventListener('click', () => selectPreset(parseInt(b.dataset.preset, 10)));
 });
 
+$('unlock-at').addEventListener('input', (e) => {
+  if (e.target.value) clearPresetSelection();
+});
+
+// Default custom-date value when expanded
+document.querySelector('.custom-date').addEventListener('toggle', (e) => {
+  if (e.target.open && !$('unlock-at').value) {
+    $('unlock-at').value = toLocalInput(new Date(Date.now() + 60 * 60 * 1000));
+  }
+});
+
+// Create CTA
+$('create-btn').addEventListener('click', handleCreate);
+$('create-another-btn').addEventListener('click', () => resetCreateForm());
+
+// iOS help links
+$('ios-help-btn').addEventListener('click', () => $('ios-dialog').showModal());
+$('success-ios-help').addEventListener('click', () => $('ios-dialog').showModal());
+
+// How it works links
+$('nav-how').addEventListener('click', () => $('how-dialog').showModal());
+$('footnote-how').addEventListener('click', () => $('how-dialog').showModal());
+
+// Navigation
+$('nav-vault').addEventListener('click', () => showView('vault'));
+$('home-link').addEventListener('click', () => showView('create'));
+$('back-to-create').addEventListener('click', () => showView('create'));
+$('empty-create-btn').addEventListener('click', () => showView('create'));
+
+// Pin list actions
 $('pin-list').addEventListener('click', async (e) => {
   const btn = e.target.closest('button');
   if (!btn) return;
@@ -504,13 +629,19 @@ $('pin-list').addEventListener('click', async (e) => {
   const p = pins[idx];
 
   if (btn.classList.contains('action-delete')) {
-    const ok = await confirmDialog('¿Borrar este PIN? No vas a poder recuperarlo después.');
+    const ok = await confirmDialog('¿Borrar este PIN? No vas a poder recuperarlo.');
     if (!ok) return;
     pins.splice(idx, 1);
     savePins(pins);
     clearAutoHide(id);
-    renderPins();
+    renderVault();
+    updateVaultBadge();
     toast('PIN borrado');
+    return;
+  }
+
+  if (btn.classList.contains('action-share')) {
+    openShareDialog(id);
     return;
   }
 
@@ -532,18 +663,18 @@ $('pin-list').addEventListener('click', async (e) => {
     const slot = item.querySelector('.pin-revealed');
     const valueEl = slot.querySelector('.pin-revealed-value');
     btn.disabled = true;
-    const originalText = btn.textContent;
-    btn.textContent = 'Abriendo...';
+    const original = btn.textContent;
+    btn.textContent = 'Abriendo…';
     try {
       const pin = await tlockDecryptPin(p.ciphertext);
       slot.hidden = false;
       valueEl.textContent = pin;
-      scheduleAutoHide(item, id);
+      scheduleAutoHide(id);
     } catch (err) {
       toast(describeDrandError(err));
     } finally {
       btn.disabled = false;
-      btn.textContent = originalText;
+      btn.textContent = original;
     }
     return;
   }
@@ -554,26 +685,23 @@ $('pin-list').addEventListener('click', async (e) => {
       if (!ok) return;
     }
     btn.disabled = true;
-    const originalText = btn.textContent;
-    btn.textContent = 'Abriendo...';
+    const original = btn.textContent;
+    btn.textContent = 'Abriendo…';
     try {
       const pin = await tlockDecryptPin(p.ciphertext);
       await copyToClipboard(pin);
       btn.textContent = 'Copiado';
       toast('PIN copiado al portapapeles');
-      setTimeout(() => {
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }, 1800);
+      setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1800);
     } catch (err) {
-      btn.textContent = originalText;
+      btn.textContent = original;
       btn.disabled = false;
       toast(describeDrandError(err));
     }
   }
 });
 
-/* Export / Import */
+// Export / import
 $('export-btn').addEventListener('click', exportPins);
 
 $('import-btn').addEventListener('click', () => {
@@ -614,17 +742,15 @@ $('import-confirm-btn').addEventListener('click', () => {
   }
   status.className = 'status success';
   const main = `Restaurados ${result.added} PIN${result.added !== 1 ? 's' : ''}.`;
-  const extra = result.skipped > 0 ? ` Omitidos ${result.skipped} que ya tenías guardados.` : '';
+  const extra = result.skipped > 0 ? ` Omitidos ${result.skipped} que ya tenías.` : '';
   status.textContent = main + extra;
-  renderPins();
+  renderVault();
+  updateVaultBadge();
   toast(main);
   setTimeout(() => $('import-dialog').close(), 1400);
 });
 
-$('import-cancel-btn').addEventListener('click', () => {
-  $('import-dialog').close();
-});
-
+// Generic close-dialog handlers
 document.querySelectorAll('[data-close-dialog]').forEach((el) => {
   el.addEventListener('click', () => {
     const id = el.getAttribute('data-close-dialog');
@@ -641,6 +767,24 @@ $('clear-clipboard-btn').addEventListener('click', async () => {
   }
 });
 
-/* Initial render */
-setInterval(renderPins, 1000);
-renderPins();
+/* =========================================================
+   Init
+   ========================================================= */
+selectLength(4);
+selectPreset(60 * 60 * 1000);
+updateVaultBadge();
+
+// If pins exist, allow user to land directly on vault via #vault hash
+if (window.location.hash === '#vault') {
+  showView('vault');
+} else {
+  showView('create');
+}
+
+// Re-render vault every second for countdowns
+setInterval(() => {
+  if (!$('view-vault').hidden) renderVault();
+}, 1000);
+
+// Handle deep-link import
+handleDeepLinkImport();

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>WaitToUnlock — Una contraseña que ni vos conocés</title>
-  <meta name="description" content="Creá una contraseña al azar para Tiempo en Pantalla y guardala en una caja fuerte que se abre sola en la fecha que elijas.">
+  <meta name="description" content="Creá una contraseña al azar para Tiempo en Pantalla y desbloqueala solo cuando elijas. 100% local, gratis, sin cuentas.">
   <meta name="theme-color" content="#0e1218">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -17,129 +17,145 @@
 <body>
   <a href="#main" class="skip-link">Saltar al contenido</a>
 
-  <main id="main" class="container">
-
-    <header class="hero">
-      <div class="hero-icon" aria-hidden="true">
-        <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="lockGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#7E8DFF"/>
-              <stop offset="100%" stop-color="#4A5BE0"/>
-            </linearGradient>
-          </defs>
-          <path d="M28 36 V26 a12 12 0 0 1 24 0 V36" stroke="url(#lockGrad)" stroke-width="3.5" fill="none" stroke-linecap="round"/>
-          <rect x="18" y="36" width="44" height="36" rx="7" fill="url(#lockGrad)"/>
-          <circle cx="40" cy="54" r="10" fill="#0e1218"/>
-          <line x1="40" y1="54" x2="40" y2="48" stroke="#7E8DFF" stroke-width="2" stroke-linecap="round"/>
-          <line x1="40" y1="54" x2="44.5" y2="56.5" stroke="#7E8DFF" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </div>
-      <h1>WaitToUnlock</h1>
-      <p class="subtitle">
-        Creá una contraseña al azar para <strong>Tiempo en Pantalla</strong>.
-        Ni vos la vas a ver. Pegala en iOS y, si querés, guardala en una caja con candado de tiempo
-        que se abre sola el día que elijas.
-      </p>
+  <main id="main" class="app">
+    <header class="topbar">
+      <button class="brand" id="home-link" type="button" aria-label="Inicio">
+        <span class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="lockGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#7E8DFF"/>
+                <stop offset="100%" stop-color="#4A5BE0"/>
+              </linearGradient>
+            </defs>
+            <path d="M30 38V28a10 10 0 0 1 20 0v10" stroke="url(#lockGrad)" stroke-width="4" fill="none" stroke-linecap="round"/>
+            <rect x="20" y="38" width="40" height="32" rx="6" fill="url(#lockGrad)"/>
+            <circle cx="40" cy="54" r="8" fill="#0e1218"/>
+            <line x1="40" y1="54" x2="40" y2="49" stroke="#7E8DFF" stroke-width="2.2" stroke-linecap="round"/>
+            <line x1="40" y1="54" x2="44" y2="56" stroke="#7E8DFF" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="brand-name">WaitToUnlock</span>
+      </button>
+      <nav class="topnav" aria-label="Navegación principal">
+        <button class="nav-link" id="nav-vault" type="button">
+          <span>Caja fuerte</span>
+          <span class="nav-badge" id="vault-count" hidden>0</span>
+        </button>
+        <button class="nav-link nav-link-icon" id="nav-how" type="button" aria-label="¿Cómo funciona?">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.7M12 17h.01"/>
+          </svg>
+        </button>
+      </nav>
     </header>
 
-    <ol class="stepper" aria-label="Pasos del flujo">
-      <li class="stepper-item is-active"><span class="stepper-num">1</span><span class="stepper-label">Crear PIN</span></li>
-      <li class="stepper-item"><span class="stepper-num">2</span><span class="stepper-label">Pegarlo en iOS</span></li>
-      <li class="stepper-item"><span class="stepper-num">3</span><span class="stepper-label">Guardarlo</span></li>
-    </ol>
-
-    <section class="card" aria-labelledby="card-create-title">
-      <header class="card-header">
-        <span class="card-num" aria-hidden="true">1</span>
-        <div>
-          <h2 id="card-create-title">Crear el PIN</h2>
-          <p class="card-desc">Generamos un código aleatorio que nunca aparece en pantalla. Va directo a tu portapapeles para que lo pegues.</p>
-        </div>
-      </header>
-
-      <div class="form-row">
-        <label for="pin-length">Longitud</label>
-        <select id="pin-length" aria-describedby="pin-length-hint">
-          <option value="4" selected>4 dígitos</option>
-          <option value="6">6 dígitos</option>
-        </select>
-        <small id="pin-length-hint" class="form-hint">Tiempo en Pantalla usa 4.</small>
+    <!-- VIEW: CREAR -->
+    <section class="view" id="view-create">
+      <div class="hero">
+        <h1>Una contraseña que ni vos conocés</h1>
+        <p class="lede">Para Tiempo en Pantalla. Se desbloquea sola en la fecha que elijas.</p>
       </div>
 
-      <button id="generate-btn" class="btn btn-primary btn-block btn-large">
-        <span class="btn-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M16 4h4v4M14 10l6-6M8 20H4v-4M10 14l-6 6"/></svg>
-        </span>
-        Crear PIN y copiar
-      </button>
+      <article class="card card-main" aria-labelledby="card-main-title">
+        <h2 id="card-main-title" class="visually-hidden">Crear PIN</h2>
 
-      <div id="generate-status" class="status" aria-live="polite" role="status"></div>
+        <!-- ESTADO: FORMULARIO -->
+        <div id="create-form">
+          <div class="field-group">
+            <span class="field-label">Largo del PIN</span>
+            <div class="segment" role="radiogroup" aria-label="Largo del PIN">
+              <button type="button" class="segment-btn is-selected" data-length="4" role="radio" aria-checked="true">4 dígitos</button>
+              <button type="button" class="segment-btn" data-length="6" role="radio" aria-checked="false">6 dígitos</button>
+            </div>
+          </div>
 
-      <details class="hint-block">
-        <summary>¿Cómo lo pego en mi iPhone?</summary>
-        <ol class="numbered-list">
-          <li>Apretá <strong>Crear PIN y copiar</strong> arriba.</li>
-          <li>Andá a <strong>Configuración → Tiempo en Pantalla → Cambiar código de Tiempo en Pantalla</strong>.</li>
-          <li>En la pantalla de código nuevo, mantené apretado el primer casillero y elegí <strong>Pegar</strong>.</li>
-          <li>Repetí cuando te pida confirmar.</li>
-        </ol>
-      </details>
+          <div class="field-group">
+            <span class="field-label">¿Cuándo querés poder abrirlo?</span>
+            <div class="presets" role="radiogroup" aria-label="Tiempo de espera">
+              <button type="button" class="btn-chip" data-preset="900000" role="radio" aria-checked="false">15 min</button>
+              <button type="button" class="btn-chip is-selected" data-preset="3600000" role="radio" aria-checked="true">1 hora</button>
+              <button type="button" class="btn-chip" data-preset="14400000" role="radio" aria-checked="false">4 horas</button>
+              <button type="button" class="btn-chip" data-preset="86400000" role="radio" aria-checked="false">1 día</button>
+              <button type="button" class="btn-chip" data-preset="259200000" role="radio" aria-checked="false">3 días</button>
+              <button type="button" class="btn-chip" data-preset="604800000" role="radio" aria-checked="false">1 semana</button>
+              <button type="button" class="btn-chip" data-preset="2592000000" role="radio" aria-checked="false">1 mes</button>
+            </div>
+            <details class="custom-date">
+              <summary>O elegir fecha exacta</summary>
+              <input type="datetime-local" id="unlock-at" aria-label="Fecha y hora de desbloqueo">
+            </details>
+          </div>
+
+          <div class="field-group field-collapsible">
+            <details>
+              <summary class="field-label-summary">Más opciones</summary>
+              <div class="field-group">
+                <label for="pin-label" class="field-label">Nombre (opcional)</label>
+                <input type="text" id="pin-label" placeholder="Ej: PIN del iPhone" maxlength="40" autocomplete="off">
+              </div>
+              <div class="field-group">
+                <label class="checkbox-row">
+                  <input type="checkbox" id="require-confirm" checked>
+                  <span>Pedirme confirmación cuando lo abra</span>
+                </label>
+              </div>
+            </details>
+          </div>
+
+          <button id="create-btn" class="btn btn-primary btn-block btn-large">
+            Crear y guardar PIN
+          </button>
+
+          <button type="button" class="btn-text" id="ios-help-btn">
+            ¿Cómo lo pego en mi iPhone?
+          </button>
+        </div>
+
+        <!-- ESTADO: ÉXITO -->
+        <div id="create-success" hidden>
+          <div class="success-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="11" fill="currentColor" opacity="0.15"/>
+              <path stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M7 12.5l3.5 3.5L17 9"/>
+            </svg>
+          </div>
+          <h2 class="success-title">¡Listo! El PIN está copiado.</h2>
+          <p class="success-lede">Pegalo ahora en <strong>Configuración → Tiempo en Pantalla</strong> de tu iPhone.</p>
+
+          <div class="success-info">
+            <div class="success-info-row">
+              <span class="success-info-label">Se abre</span>
+              <span class="success-info-value" id="success-when">—</span>
+            </div>
+            <div class="success-info-row">
+              <span class="success-info-label">En</span>
+              <span class="success-info-value mono" id="success-countdown">—</span>
+            </div>
+          </div>
+
+          <div class="success-actions">
+            <button class="btn btn-secondary" id="success-ios-help" type="button">¿Cómo lo pego?</button>
+            <button class="btn btn-ghost" id="create-another-btn" type="button">Crear otro</button>
+          </div>
+        </div>
+      </article>
+
+      <p class="footnote">
+        <button type="button" class="link-soft" id="footnote-how">¿Cómo funciona?</button>
+        <span aria-hidden="true">·</span>
+        <a href="https://github.com/nicogiuls-dotcom/WaitToUnlock" target="_blank" rel="noopener">Código abierto</a>
+      </p>
     </section>
 
-    <section class="card" id="save-section" aria-labelledby="card-save-title" hidden>
-      <header class="card-header">
-        <span class="card-num" aria-hidden="true">3</span>
-        <div>
-          <h2 id="card-save-title">Guardar en la caja fuerte</h2>
-          <p class="card-desc">Si querés poder recuperar este PIN más adelante, guardalo. La caja queda con candado de tiempo: ni vos podés mirar adentro hasta la fecha que elijas.</p>
-        </div>
-      </header>
-
-      <div class="form-row">
-        <label for="pin-label">Nombre (opcional)</label>
-        <input type="text" id="pin-label" placeholder="Ej: PIN del iPhone" maxlength="40" autocomplete="off">
-      </div>
-
-      <fieldset class="form-row form-fieldset">
-        <legend>¿Cuándo querés poder abrirlo?</legend>
-        <div class="presets" role="group" aria-label="Atajos">
-          <button type="button" class="btn-chip" data-preset="900000">15 min</button>
-          <button type="button" class="btn-chip" data-preset="3600000">1 hora</button>
-          <button type="button" class="btn-chip" data-preset="14400000">4 horas</button>
-          <button type="button" class="btn-chip" data-preset="86400000">1 día</button>
-          <button type="button" class="btn-chip" data-preset="259200000">3 días</button>
-          <button type="button" class="btn-chip" data-preset="604800000">1 semana</button>
-          <button type="button" class="btn-chip" data-preset="2592000000">1 mes</button>
-        </div>
-        <label for="unlock-at" class="form-sub-label">O elegí fecha y hora exacta</label>
-        <input type="datetime-local" id="unlock-at" aria-describedby="unlock-at-hint">
-        <small id="unlock-at-hint" class="form-hint">Una vez guardado, no se puede cambiar la fecha.</small>
-      </fieldset>
-
-      <div class="form-row">
-        <label class="checkbox-row">
-          <input type="checkbox" id="require-confirm" checked>
-          <span>
-            Pedirme confirmación cuando lo abra
-            <small class="form-hint">Te protege de mostrarlo sin querer en una pantalla compartida.</small>
-          </span>
-        </label>
-      </div>
-
-      <div class="actions">
-        <button id="save-btn" class="btn btn-primary">Guardar en caja fuerte</button>
-        <button id="discard-btn" class="btn btn-ghost">Ya lo pegué, no lo guardo</button>
-      </div>
-    </section>
-
-    <section class="card" aria-labelledby="vault-title">
-      <header class="card-header card-header-row">
-        <div class="card-header-text">
-          <h2 id="vault-title">Caja fuerte</h2>
-          <p class="card-desc">PINs guardados en este dispositivo.</p>
-        </div>
-        <span class="badge" id="pin-count" aria-live="polite"></span>
+    <!-- VIEW: CAJA FUERTE -->
+    <section class="view" id="view-vault" hidden>
+      <header class="view-header">
+        <button class="btn-back" id="back-to-create" type="button" aria-label="Volver">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <h1 class="view-title">Caja fuerte</h1>
       </header>
 
       <div id="empty-state" class="empty-state">
@@ -147,82 +163,127 @@
           <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="12" y="22" width="40" height="32" rx="4"/><path d="M22 22V14a10 10 0 0 1 20 0v8"/><circle cx="32" cy="38" r="3"/></svg>
         </div>
         <p class="empty-title">La caja está vacía</p>
-        <p class="muted">Cuando crees un PIN nuevo, vas a poder guardarlo acá para abrirlo más adelante.</p>
+        <p class="muted">Cuando crees un PIN, vas a poder abrirlo desde acá cuando llegue la fecha.</p>
+        <button class="btn btn-primary" id="empty-create-btn" type="button">Crear primer PIN</button>
       </div>
 
       <ul id="pin-list" class="pin-list" aria-label="PINs guardados"></ul>
 
-      <div class="bulk-actions">
-        <button id="export-btn" class="btn btn-secondary btn-small">Hacer respaldo</button>
-        <button id="import-btn" class="btn btn-secondary btn-small">Restaurar respaldo</button>
-        <button id="clear-clipboard-btn" class="btn btn-ghost btn-small">Limpiar portapapeles</button>
-      </div>
-
-      <details class="hint-block">
-        <summary>¿Es seguro guardar el respaldo en internet?</summary>
-        <p>
-          Sí. El respaldo es un <strong>cofre cerrado</strong>, no la llave.
-          Lo podés mandar por mail, subir a iCloud Drive, Google Drive, Notes, donde quieras.
-          Hasta que llegue la fecha que elegiste, ni vos podés abrirlo.
+      <details class="vault-more">
+        <summary>Más opciones</summary>
+        <div class="vault-more-actions">
+          <button id="export-btn" class="btn btn-secondary btn-small">Hacer respaldo</button>
+          <button id="import-btn" class="btn btn-secondary btn-small">Restaurar respaldo</button>
+          <button id="clear-clipboard-btn" class="btn btn-ghost btn-small">Limpiar portapapeles</button>
+        </div>
+        <p class="vault-more-hint">
+          Para mover PINs entre dispositivos, también podés usar el botón <strong>Pasar a otro celu</strong> dentro de cada PIN.
         </p>
       </details>
     </section>
-
-    <footer class="footer">
-      <details class="footer-details">
-        <summary>¿Cómo funciona el candado de tiempo?</summary>
-        <p>
-          Usamos una técnica que se llama <em>timelock encryption</em>:
-          tu PIN se cierra con una llave que <strong>todavía no existe</strong>.
-        </p>
-        <p>
-          Hay una red distribuida (operada por Cloudflare, EPFL y otros) que publica una nueva llave
-          cada 3 segundos, en orden, sin saltarse ninguna ni adelantarse. Cuando guardás un PIN,
-          lo cerramos con la llave que va a publicarse en la fecha que vos elegiste.
-        </p>
-        <p>
-          Por eso ningún truco rompe el candado: cambiar la hora del celu, abrir las herramientas
-          del navegador, copiar el archivo a otro lado. La llave física-matemática para abrirlo
-          aún no fue creada.
-        </p>
-        <p class="muted small">
-          Detalles técnicos: drand quicknet, IBE sobre BLS12-381, ciphertexts en localStorage.
-          Sin backend, sin cuentas, sin telemetría. Aleatoriedad por <code>crypto.getRandomValues</code>.
-        </p>
-      </details>
-      <p class="footer-meta">
-        Hecho con cariño · <a href="https://github.com/nicogiuls-dotcom/WaitToUnlock" target="_blank" rel="noopener">Código abierto</a>
-      </p>
-    </footer>
   </main>
 
-  <dialog id="import-dialog" class="dialog" aria-labelledby="import-title">
+  <!-- TOAST -->
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- DIALOG: HOW IT WORKS -->
+  <dialog id="how-dialog" class="dialog" aria-labelledby="how-title">
     <header class="dialog-header">
-      <h3 id="import-title">Restaurar respaldo</h3>
-      <button type="button" class="dialog-close" id="import-cancel-btn" aria-label="Cerrar">
+      <h3 id="how-title">¿Cómo funciona?</h3>
+      <button type="button" class="dialog-close" data-close-dialog="how-dialog" aria-label="Cerrar">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="20" height="20"><path d="M6 6l12 12M6 18L18 6"/></svg>
       </button>
     </header>
-    <p class="muted">Subí el archivo de respaldo o pegá su contenido. Los PINs se agregan a tu caja fuerte sin pisar los actuales.</p>
+    <ol class="how-steps">
+      <li>
+        <strong>Generamos un PIN al azar.</strong> Aparece copiado en tu portapapeles, pero nunca en pantalla. Ni vos ni nadie lo vio.
+      </li>
+      <li>
+        <strong>Lo pegás en Tiempo en Pantalla.</strong> En el iPhone: <em>Configuración → Tiempo en Pantalla → Cambiar código</em>. Mantené apretado el primer casillero y tocá Pegar.
+      </li>
+      <li>
+        <strong>Lo guardamos en una caja con candado de tiempo.</strong> El PIN se cierra con una llave que <strong>todavía no existe</strong>: la genera una red distribuida en la fecha que elegiste, ni un segundo antes.
+      </li>
+      <li>
+        <strong>Cuando llega la fecha, abrís la caja.</strong> Mientras tanto, ningún truco la fuerza: cambiar el reloj del celu, abrir DevTools, copiar el archivo a otro lado.
+      </li>
+    </ol>
+    <details class="how-tech">
+      <summary>Detalles técnicos</summary>
+      <p>
+        Usamos <em>timelock encryption</em> contra la red <strong>drand quicknet</strong> (operada por League of Entropy: Cloudflare, EPFL, Protocol Labs, etc).
+        IBE sobre BLS12-381. Los ciphertexts viven solo en el <code>localStorage</code> de tu navegador.
+      </p>
+      <p class="muted">
+        Sin backend, sin cuentas, sin telemetría. Aleatoriedad por <code>crypto.getRandomValues</code>.
+      </p>
+    </details>
+    <button type="button" class="btn btn-primary btn-block" data-close-dialog="how-dialog">Entendido</button>
+  </dialog>
 
+  <!-- DIALOG: iOS HELP -->
+  <dialog id="ios-dialog" class="dialog" aria-labelledby="ios-title">
+    <header class="dialog-header">
+      <h3 id="ios-title">¿Cómo lo pego en iOS?</h3>
+      <button type="button" class="dialog-close" data-close-dialog="ios-dialog" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="20" height="20"><path d="M6 6l12 12M6 18L18 6"/></svg>
+      </button>
+    </header>
+    <ol class="how-steps">
+      <li>Apretá <strong>Crear y guardar PIN</strong>. El PIN queda en tu portapapeles.</li>
+      <li>En el iPhone: <strong>Configuración → Tiempo en Pantalla → Cambiar código de Tiempo en Pantalla</strong>.</li>
+      <li>Cuando te pida el código nuevo, mantené apretado el primer casillero y elegí <strong>Pegar</strong>.</li>
+      <li>Repetí en la confirmación si te lo pide otra vez.</li>
+    </ol>
+    <p class="muted">Si no aparece "Pegar", aseguráte de tener iOS 16 o superior y de haber generado el PIN hace menos de 1 minuto.</p>
+    <button type="button" class="btn btn-primary btn-block" data-close-dialog="ios-dialog">Entendido</button>
+  </dialog>
+
+  <!-- DIALOG: QR -->
+  <dialog id="qr-dialog" class="dialog" aria-labelledby="qr-title">
+    <header class="dialog-header">
+      <h3 id="qr-title">Pasar a otro celular</h3>
+      <button type="button" class="dialog-close" data-close-dialog="qr-dialog" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="20" height="20"><path d="M6 6l12 12M6 18L18 6"/></svg>
+      </button>
+    </header>
+    <p class="muted">Escaneá este código con la cámara del otro iPhone. Se abre la app y agrega el PIN a su caja fuerte.</p>
+    <div class="qr-box">
+      <div id="qr-canvas" class="qr-canvas" aria-label="Código QR"></div>
+      <div id="qr-loading" class="qr-loading">Generando código…</div>
+    </div>
+    <p class="qr-caption">Cofre cerrado: aunque alguien intercepte el QR, no puede abrirlo antes de la fecha.</p>
+    <div class="actions">
+      <button type="button" id="qr-copy-link-btn" class="btn btn-secondary">Copiar enlace</button>
+      <button type="button" class="btn btn-ghost" data-close-dialog="qr-dialog">Cerrar</button>
+    </div>
+  </dialog>
+
+  <!-- DIALOG: IMPORTAR (archivo / texto) -->
+  <dialog id="import-dialog" class="dialog" aria-labelledby="import-title">
+    <header class="dialog-header">
+      <h3 id="import-title">Restaurar respaldo</h3>
+      <button type="button" class="dialog-close" data-close-dialog="import-dialog" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="20" height="20"><path d="M6 6l12 12M6 18L18 6"/></svg>
+      </button>
+    </header>
+    <p class="muted">Subí un archivo de respaldo o pegá su contenido. Los PINs se agregan sin pisar los actuales.</p>
     <div class="form-row">
       <label for="import-file">Desde archivo</label>
       <input type="file" id="import-file" accept=".json,application/json">
     </div>
-
     <div class="form-row">
-      <label for="import-text">O pegá el contenido</label>
-      <textarea id="import-text" rows="6" spellcheck="false" placeholder='Pegá acá el JSON del respaldo'></textarea>
+      <label for="import-text">O pegá el JSON</label>
+      <textarea id="import-text" rows="5" spellcheck="false" placeholder='Pegá acá el contenido del respaldo'></textarea>
     </div>
-
     <div id="import-status" class="status" aria-live="polite" role="status"></div>
-
     <div class="actions">
       <button type="button" id="import-confirm-btn" class="btn btn-primary">Restaurar</button>
       <button type="button" class="btn btn-ghost" data-close-dialog="import-dialog">Cancelar</button>
     </div>
   </dialog>
 
+  <!-- DIALOG: CONFIRMAR (genérico) -->
   <dialog id="confirm-dialog" class="dialog" aria-labelledby="confirm-title">
     <header class="dialog-header">
       <h3 id="confirm-title">Confirmar</h3>
@@ -234,8 +295,7 @@
     </div>
   </dialog>
 
-  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-
+  <!-- TEMPLATE: PIN ITEM -->
   <template id="pin-item-template">
     <li class="pin-item">
       <div class="pin-main">
@@ -251,14 +311,20 @@
         <div class="pin-countdown"></div>
       </div>
       <div class="pin-revealed" hidden>
-        <span class="pin-revealed-label">Tu PIN:</span>
+        <span class="pin-revealed-label">Tu PIN</span>
         <span class="pin-revealed-value" aria-live="polite"></span>
         <button type="button" class="btn btn-ghost btn-small action-hide">Ocultar</button>
       </div>
       <div class="pin-actions">
         <button type="button" class="btn btn-secondary btn-small action-reveal">Ver PIN</button>
         <button type="button" class="btn btn-secondary btn-small action-copy">Copiar PIN</button>
-        <button type="button" class="btn btn-ghost btn-small action-delete" aria-label="Borrar este PIN">Borrar</button>
+        <button type="button" class="btn btn-ghost btn-small action-share" aria-label="Pasar a otro celular">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM18 18h3v3h-3zM14 18h0M21 14h0"/></svg>
+          <span>Pasar</span>
+        </button>
+        <button type="button" class="btn btn-ghost btn-small action-delete" aria-label="Borrar este PIN">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
       </div>
     </li>
   </template>
