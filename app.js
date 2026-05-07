@@ -9,6 +9,7 @@ import {
 } from 'https://esm.sh/tlock-js@0.9.0';
 
 const STORE_KEY = 'wtu.pins.v2';
+const REVEAL_TIMEOUT_MS = 30_000;
 const $ = (id) => document.getElementById(id);
 
 const QUICKNET_CHAIN_INFO = {
@@ -28,7 +29,11 @@ const drandChain = new HttpCachingChain(QUICKNET_URL, QUICKNET_CHAIN_INFO);
 const drandClient = new HttpChainClient(drandChain);
 
 let pendingPin = null;
+const revealTimers = new Map();
 
+/* =========================
+   Utilities
+   ========================= */
 function generatePin(length) {
   const buf = new Uint32Array(length);
   crypto.getRandomValues(buf);
@@ -54,7 +59,7 @@ async function copyToClipboard(text) {
   ta.select();
   const ok = document.execCommand('copy');
   document.body.removeChild(ta);
-  if (!ok) throw new Error('execCommand copy falló');
+  if (!ok) throw new Error('clipboard fallback failed');
 }
 
 function loadPins() {
@@ -85,42 +90,92 @@ function toLocalInput(d) {
 }
 
 function formatRemaining(ms) {
-  if (ms <= 0) return 'disponible';
+  if (ms <= 0) return 'ya está disponible';
   const s = Math.floor(ms / 1000);
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (d > 0) return `faltan ${d}d ${h}h ${m}m`;
-  if (h > 0) return `faltan ${h}h ${m}m ${sec}s`;
-  if (m > 0) return `faltan ${m}m ${sec}s`;
-  return `faltan ${sec}s`;
+  if (d > 0) return `Faltan ${d}d ${h}h ${m}m`;
+  if (h > 0) return `Faltan ${h}h ${m}m`;
+  if (m > 0) return `Faltan ${m}m ${sec}s`;
+  return `Faltan ${sec}s`;
 }
 
-function formatDate(ts) {
-  return new Date(ts).toLocaleString('es', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
+function formatUnlockDate(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const isTomorrow = d.toDateString() === tomorrow.toDateString();
+
+  const time = d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' });
+  if (sameDay) return `Hoy a las ${time}`;
+  if (isTomorrow) return `Mañana a las ${time}`;
+  return d.toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+/* =========================
+   Status / toast / dialogs
+   ========================= */
 function setStatus(kind, msg) {
   const el = $('generate-status');
   el.className = `status ${kind}`;
   el.textContent = msg;
 }
 
+function clearStatus() {
+  const el = $('generate-status');
+  el.className = 'status';
+  el.textContent = '';
+}
+
+let toastTimer = null;
+function toast(message) {
+  const el = $('toast');
+  el.textContent = message;
+  el.hidden = false;
+  requestAnimationFrame(() => el.classList.add('is-visible'));
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    el.classList.remove('is-visible');
+    setTimeout(() => { el.hidden = true; }, 220);
+  }, 2400);
+}
+
+function confirmDialog(message) {
+  return new Promise((resolve) => {
+    const dialog = $('confirm-dialog');
+    $('confirm-message').textContent = message;
+    const yesBtn = $('confirm-yes-btn');
+    const noBtn = $('confirm-no-btn');
+
+    const cleanup = () => {
+      yesBtn.removeEventListener('click', onYes);
+      noBtn.removeEventListener('click', onNo);
+      dialog.removeEventListener('cancel', onNo);
+    };
+    const onYes = () => { cleanup(); dialog.close(); resolve(true); };
+    const onNo = (e) => { if (e) e.preventDefault?.(); cleanup(); dialog.close(); resolve(false); };
+
+    yesBtn.addEventListener('click', onYes);
+    noBtn.addEventListener('click', onNo);
+    dialog.addEventListener('cancel', onNo);
+    dialog.showModal();
+  });
+}
+
+/* =========================
+   Crypto wrappers
+   ========================= */
 function roundForUnlockTime(unlockMs) {
   return roundAt(unlockMs, QUICKNET_CHAIN_INFO) + 1;
 }
 
 async function tlockEncryptPin(pin, unlockMs) {
   const round = roundForUnlockTime(unlockMs);
-  const ciphertext = await timelockEncrypt(
-    round,
-    Buffer.from(pin, 'utf-8'),
-    drandClient
-  );
+  const ciphertext = await timelockEncrypt(round, Buffer.from(pin, 'utf-8'), drandClient);
   return { ciphertext, round };
 }
 
@@ -129,32 +184,63 @@ async function tlockDecryptPin(ciphertext) {
   return buf.toString('utf-8');
 }
 
+function describeDrandError(err) {
+  const msg = (err && err.message) || String(err);
+  if (/network|fetch|Failed to fetch|HTTP/i.test(msg)) {
+    return 'No tengo internet. Conectate y volvé a intentar.';
+  }
+  if (/round|beacon|signature/i.test(msg)) {
+    return 'Falta poquito para que se abra. Esperá unos segundos y reintentá.';
+  }
+  return 'Algo salió mal al abrir la caja. Probá de nuevo.';
+}
+
+/* =========================
+   Render
+   ========================= */
 function renderPins() {
   const list = $('pin-list');
   const pins = loadPins().sort((a, b) => a.unlockAt - b.unlockAt);
+  const now = Date.now();
+
+  // Preserve which items are currently revealed so we don't wipe the value on tick re-render.
+  const previouslyRevealed = new Map();
+  list.querySelectorAll('.pin-item').forEach((node) => {
+    const slot = node.querySelector('.pin-revealed');
+    if (slot && !slot.hidden) {
+      previouslyRevealed.set(node.dataset.id, node.querySelector('.pin-revealed-value').textContent);
+    }
+  });
+
   list.innerHTML = '';
+
   $('empty-state').hidden = pins.length > 0;
-  $('bulk-actions').hidden = pins.length === 0;
+  $('export-btn').disabled = pins.length === 0;
+
+  const badge = $('pin-count');
+  badge.textContent = pins.length > 0 ? String(pins.length) : '';
 
   const tpl = $('pin-item-template');
-  const now = Date.now();
 
   for (const p of pins) {
     const node = tpl.content.firstElementChild.cloneNode(true);
     node.dataset.id = p.id;
-    node.querySelector('.pin-label').textContent = p.label || 'Sin etiqueta';
+    node.querySelector('.pin-label').textContent = p.label || 'Sin nombre';
     node.querySelector('.pin-length').textContent = `${p.length || 4} dígitos`;
-    node.querySelector('.pin-unlock-at').textContent =
-      `desbloqueo: ${formatDate(p.unlockAt)} · ronda drand ${p.round}`;
+    node.querySelector('.pin-unlock-at').textContent = `se abre ${formatUnlockDate(p.unlockAt)}`;
 
     const unlocked = now >= p.unlockAt;
-    const statusEl = node.querySelector('.pin-status');
+    const pill = node.querySelector('.pin-status-pill');
+    const countdown = node.querySelector('.pin-countdown');
+
     if (unlocked) {
-      statusEl.className = 'pin-status unlocked';
-      statusEl.textContent = 'Disponible (la red drand ya publicó la ronda)';
+      pill.className = 'pin-status-pill unlocked';
+      pill.textContent = 'Lista para abrir';
+      countdown.textContent = '';
     } else {
-      statusEl.className = 'pin-status locked';
-      statusEl.textContent = `Bloqueado · ${formatRemaining(p.unlockAt - now)}`;
+      pill.className = 'pin-status-pill locked';
+      pill.textContent = 'Bloqueado';
+      countdown.textContent = formatRemaining(p.unlockAt - now);
     }
 
     const revealBtn = node.querySelector('.action-reveal');
@@ -162,16 +248,24 @@ function renderPins() {
     revealBtn.disabled = !unlocked;
     copyBtn.disabled = !unlocked;
 
+    // If this pin was being shown before re-render, restore it.
+    if (previouslyRevealed.has(p.id)) {
+      const slot = node.querySelector('.pin-revealed');
+      slot.hidden = false;
+      slot.querySelector('.pin-revealed-value').textContent = previouslyRevealed.get(p.id);
+    }
+
     list.appendChild(node);
   }
-
-  $('export-btn').disabled = pins.length === 0;
 }
 
+/* =========================
+   Export / Import
+   ========================= */
 function exportPins() {
   const pins = loadPins();
   if (pins.length === 0) {
-    setStatus('error', 'No hay PINs para exportar.');
+    toast('No hay PINs para respaldar.');
     return;
   }
   const payload = {
@@ -186,25 +280,15 @@ function exportPins() {
   const a = document.createElement('a');
   const date = new Date().toISOString().slice(0, 10);
   a.href = url;
-  a.download = `waittounlock-backup-${date}.json`;
+  a.download = `waittounlock-respaldo-${date}.json`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
   copyToClipboard(json)
-    .then(() => {
-      setStatus(
-        'info',
-        `Exportados ${pins.length} PIN(s). Archivo descargado y JSON copiado al portapapeles. Guardalo donde quieras: el contenido sigue cifrado por drand.`
-      );
-    })
-    .catch(() => {
-      setStatus(
-        'info',
-        `Exportados ${pins.length} PIN(s) en el archivo descargado.`
-      );
-    });
+    .then(() => toast(`Respaldo descargado y copiado (${pins.length} PIN${pins.length !== 1 ? 's' : ''}).`))
+    .catch(() => toast(`Respaldo descargado (${pins.length} PIN${pins.length !== 1 ? 's' : ''}).`));
 }
 
 function importPinsFromJson(jsonStr) {
@@ -212,7 +296,7 @@ function importPinsFromJson(jsonStr) {
   try {
     parsed = JSON.parse(jsonStr);
   } catch {
-    return { ok: false, error: 'JSON inválido. Revisá el formato.' };
+    return { ok: false, error: 'El contenido no es un JSON válido.' };
   }
 
   let incoming;
@@ -221,14 +305,14 @@ function importPinsFromJson(jsonStr) {
   } else if (parsed && Array.isArray(parsed.pins)) {
     incoming = parsed.pins;
   } else {
-    return { ok: false, error: 'No encontré una lista de PINs en el JSON.' };
+    return { ok: false, error: 'No encontré PINs en el archivo.' };
   }
 
   const valid = incoming.filter(
     (p) => p && typeof p.id === 'string' && typeof p.ciphertext === 'string' && Number.isFinite(p.unlockAt)
   );
   if (valid.length === 0) {
-    return { ok: false, error: 'El JSON no contiene PINs con el formato esperado.' };
+    return { ok: false, error: 'El archivo no tiene PINs con el formato correcto.' };
   }
 
   const existing = loadPins();
@@ -237,10 +321,7 @@ function importPinsFromJson(jsonStr) {
   let added = 0;
   let skipped = 0;
   for (const p of valid) {
-    if (existingIds.has(p.id)) {
-      skipped++;
-      continue;
-    }
+    if (existingIds.has(p.id)) { skipped++; continue; }
     existing.push({
       id: p.id,
       label: typeof p.label === 'string' ? p.label : '',
@@ -258,17 +339,50 @@ function importPinsFromJson(jsonStr) {
   return { ok: true, added, skipped };
 }
 
-function describeDrandError(err) {
-  const msg = (err && err.message) || String(err);
-  if (/network|fetch|Failed to fetch|HTTP/i.test(msg)) {
-    return 'No pude contactar a la red drand. Revisá tu conexión y probá de nuevo.';
-  }
-  if (/round|beacon|signature/i.test(msg)) {
-    return 'La ronda drand correspondiente todavía no fue publicada. Esperá unos segundos y reintentá.';
-  }
-  return `Error al descifrar: ${msg}`;
+/* =========================
+   Reveal lifecycle
+   ========================= */
+function scheduleAutoHide(itemEl, id) {
+  clearAutoHide(id);
+  const timer = setTimeout(() => {
+    const node = document.querySelector(`.pin-item[data-id="${id}"]`);
+    if (!node) return;
+    const slot = node.querySelector('.pin-revealed');
+    if (slot) {
+      slot.hidden = true;
+      slot.querySelector('.pin-revealed-value').textContent = '';
+    }
+    revealTimers.delete(id);
+  }, REVEAL_TIMEOUT_MS);
+  revealTimers.set(id, timer);
 }
 
+function clearAutoHide(id) {
+  if (revealTimers.has(id)) {
+    clearTimeout(revealTimers.get(id));
+    revealTimers.delete(id);
+  }
+}
+
+/* =========================
+   Step indicator
+   ========================= */
+function setStep(n) {
+  document.querySelectorAll('.stepper-item').forEach((el, i) => {
+    el.classList.toggle('is-active', i === n - 1);
+  });
+}
+
+/* =========================
+   Preset chips
+   ========================= */
+function clearChipSelection() {
+  document.querySelectorAll('.btn-chip').forEach((b) => b.classList.remove('is-selected'));
+}
+
+/* =========================
+   Event handlers
+   ========================= */
 $('generate-btn').addEventListener('click', async () => {
   const length = parseInt($('pin-length').value, 10) || 4;
   const pin = generatePin(length);
@@ -278,19 +392,20 @@ $('generate-btn').addEventListener('click', async () => {
     pendingPin = null;
     setStatus(
       'error',
-      'No pude copiar al portapapeles. Verificá los permisos del navegador o servila por HTTPS.'
+      'No pude copiar al portapapeles. Probá de nuevo, o abrí la app desde una conexión segura (https).'
     );
     return;
   }
   pendingPin = { value: pin, length };
   setStatus(
     'success',
-    `PIN de ${length} dígitos en el portapapeles. Pegalo en Configuración → Tiempo en Pantalla → Cambiar código. ` +
-      `Si querés recuperarlo más tarde, guardalo bloqueado abajo.`
+    `Listo. Tu PIN de ${length} dígitos está copiado y nadie lo vio (ni vos). Pegalo ahora en Tiempo en Pantalla.`
   );
 
+  setStep(2);
   $('save-section').hidden = false;
   $('unlock-at').value = toLocalInput(new Date(Date.now() + 60 * 60 * 1000));
+  clearChipSelection();
   $('save-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
@@ -298,41 +413,45 @@ document.querySelectorAll('.btn-chip[data-preset]').forEach((btn) => {
   btn.addEventListener('click', () => {
     const ms = parseInt(btn.dataset.preset, 10);
     $('unlock-at').value = toLocalInput(new Date(Date.now() + ms));
+    clearChipSelection();
+    btn.classList.add('is-selected');
   });
 });
 
+$('unlock-at').addEventListener('input', clearChipSelection);
+
 $('save-btn').addEventListener('click', async () => {
   if (!pendingPin) {
-    setStatus('error', 'No hay un PIN pendiente. Generá uno primero.');
+    setStatus('error', 'No hay un PIN pendiente. Creá uno primero.');
     return;
   }
   const unlockStr = $('unlock-at').value;
   if (!unlockStr) {
-    alert('Elegí cuándo se desbloquea (usá un atajo o la fecha exacta).');
+    toast('Elegí cuándo se abre la caja.');
     return;
   }
   const unlockAt = new Date(unlockStr).getTime();
   if (!Number.isFinite(unlockAt)) {
-    alert('La fecha no es válida.');
+    toast('La fecha no es válida.');
     return;
   }
   if (unlockAt <= Date.now()) {
-    alert('La fecha tiene que ser en el futuro.');
+    toast('Elegí una fecha en el futuro.');
     return;
   }
 
   const saveBtn = $('save-btn');
+  const originalText = saveBtn.textContent;
   saveBtn.disabled = true;
-  saveBtn.textContent = 'Cifrando con drand timelock...';
-  setStatus('info', 'Cifrando...');
+  saveBtn.textContent = 'Cerrando la caja...';
 
   let encrypted;
   try {
     encrypted = await tlockEncryptPin(pendingPin.value, unlockAt);
   } catch (err) {
     saveBtn.disabled = false;
-    saveBtn.textContent = 'Guardar PIN bloqueado';
-    setStatus('error', `No se pudo cifrar: ${(err && err.message) || err}`);
+    saveBtn.textContent = originalText;
+    setStatus('error', describeDrandError(err));
     return;
   }
 
@@ -353,20 +472,23 @@ $('save-btn').addEventListener('click', async () => {
   $('save-section').hidden = true;
   $('pin-label').value = '';
   saveBtn.disabled = false;
-  saveBtn.textContent = 'Guardar PIN bloqueado';
+  saveBtn.textContent = originalText;
+  setStep(1);
   setStatus(
     'info',
-    `PIN cifrado con drand (ronda ${encrypted.round}, aprox. ${formatDate(roundTime(QUICKNET_CHAIN_INFO, encrypted.round))}). ` +
-      `Asegurate de haberlo pegado YA en Screen Time: ni vos ni nadie puede descifrarlo antes de esa ronda.`
+    `Guardado. La caja se abre sola ${formatUnlockDate(unlockAt)}. Hasta entonces, ni vos podés mirar adentro. ` +
+      `Asegurate de que ya pegaste el PIN en Tiempo en Pantalla.`
   );
   renderPins();
+  toast('PIN guardado en la caja fuerte');
 });
 
 $('discard-btn').addEventListener('click', () => {
   pendingPin = null;
   $('save-section').hidden = true;
   $('pin-label').value = '';
-  setStatus('info', 'PIN descartado de esta sesión. Si ya lo pegaste en Screen Time, todo bien.');
+  setStep(1);
+  setStatus('info', 'Ok, no lo guardamos. Si ya lo pegaste en Tiempo en Pantalla, todo bien.');
 });
 
 $('pin-list').addEventListener('click', async (e) => {
@@ -382,55 +504,76 @@ $('pin-list').addEventListener('click', async (e) => {
   const p = pins[idx];
 
   if (btn.classList.contains('action-delete')) {
-    if (!confirm('¿Eliminar este PIN guardado? El ciphertext se borra y no podrás recuperarlo.')) return;
+    const ok = await confirmDialog('¿Borrar este PIN? No vas a poder recuperarlo después.');
+    if (!ok) return;
     pins.splice(idx, 1);
     savePins(pins);
+    clearAutoHide(id);
     renderPins();
+    toast('PIN borrado');
+    return;
+  }
+
+  if (btn.classList.contains('action-hide')) {
+    const slot = item.querySelector('.pin-revealed');
+    slot.hidden = true;
+    slot.querySelector('.pin-revealed-value').textContent = '';
+    clearAutoHide(id);
     return;
   }
 
   if (Date.now() < p.unlockAt) return;
 
   if (btn.classList.contains('action-reveal')) {
-    if (p.requireConfirm && !confirm('Esto va a mostrar el PIN en pantalla. ¿Seguro?')) return;
+    if (p.requireConfirm) {
+      const ok = await confirmDialog('Va a aparecer en pantalla. ¿Querés verlo igual?');
+      if (!ok) return;
+    }
     const slot = item.querySelector('.pin-revealed');
-    const original = btn.textContent;
+    const valueEl = slot.querySelector('.pin-revealed-value');
     btn.disabled = true;
-    btn.textContent = 'Descifrando...';
+    const originalText = btn.textContent;
+    btn.textContent = 'Abriendo...';
     try {
       const pin = await tlockDecryptPin(p.ciphertext);
       slot.hidden = false;
-      slot.textContent = pin;
+      valueEl.textContent = pin;
+      scheduleAutoHide(item, id);
     } catch (err) {
-      alert(describeDrandError(err));
+      toast(describeDrandError(err));
     } finally {
       btn.disabled = false;
-      btn.textContent = original;
+      btn.textContent = originalText;
     }
     return;
   }
 
   if (btn.classList.contains('action-copy')) {
-    if (p.requireConfirm && !confirm('Esto va a copiar el PIN al portapapeles. ¿Seguro?')) return;
-    const original = btn.textContent;
+    if (p.requireConfirm) {
+      const ok = await confirmDialog('Va a quedar copiado en el portapapeles. ¿Continuar?');
+      if (!ok) return;
+    }
     btn.disabled = true;
-    btn.textContent = 'Descifrando...';
+    const originalText = btn.textContent;
+    btn.textContent = 'Abriendo...';
     try {
       const pin = await tlockDecryptPin(p.ciphertext);
       await copyToClipboard(pin);
       btn.textContent = 'Copiado';
+      toast('PIN copiado al portapapeles');
       setTimeout(() => {
-        btn.textContent = original;
+        btn.textContent = originalText;
         btn.disabled = false;
       }, 1800);
     } catch (err) {
-      btn.textContent = original;
+      btn.textContent = originalText;
       btn.disabled = false;
-      alert(describeDrandError(err));
+      toast(describeDrandError(err));
     }
   }
 });
 
+/* Export / Import */
 $('export-btn').addEventListener('click', exportPins);
 
 $('import-btn').addEventListener('click', () => {
@@ -460,7 +603,7 @@ $('import-confirm-btn').addEventListener('click', () => {
   const status = $('import-status');
   if (!json) {
     status.className = 'status error';
-    status.textContent = 'Pegá un JSON o subí un archivo.';
+    status.textContent = 'Subí un archivo o pegá el contenido del respaldo.';
     return;
   }
   const result = importPinsFromJson(json);
@@ -470,10 +613,11 @@ $('import-confirm-btn').addEventListener('click', () => {
     return;
   }
   status.className = 'status success';
-  status.textContent =
-    `Importados ${result.added} PIN(s).` +
-    (result.skipped > 0 ? ` Omitidos ${result.skipped} duplicado(s) (mismo id).` : '');
+  const main = `Restaurados ${result.added} PIN${result.added !== 1 ? 's' : ''}.`;
+  const extra = result.skipped > 0 ? ` Omitidos ${result.skipped} que ya tenías guardados.` : '';
+  status.textContent = main + extra;
   renderPins();
+  toast(main);
   setTimeout(() => $('import-dialog').close(), 1400);
 });
 
@@ -481,14 +625,22 @@ $('import-cancel-btn').addEventListener('click', () => {
   $('import-dialog').close();
 });
 
+document.querySelectorAll('[data-close-dialog]').forEach((el) => {
+  el.addEventListener('click', () => {
+    const id = el.getAttribute('data-close-dialog');
+    $(id)?.close();
+  });
+});
+
 $('clear-clipboard-btn').addEventListener('click', async () => {
   try {
     await copyToClipboard(' ');
-    setStatus('info', 'Portapapeles sobrescrito con un espacio en blanco.');
+    toast('Portapapeles limpio');
   } catch {
-    setStatus('error', 'No se pudo limpiar el portapapeles.');
+    toast('No se pudo limpiar el portapapeles');
   }
 });
 
+/* Initial render */
 setInterval(renderPins, 1000);
 renderPins();
