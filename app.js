@@ -18,17 +18,49 @@ const QUICKNET_CHAIN_INFO = {
 const QUICKNET_URL =
   'https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971';
 
-/* Lazy load tlock-js so that the UI boots independently of the
-   esm.sh CDN. If the import fails the page is still usable, and
-   only encrypt/decrypt actions surface the network error. */
+/* CDN fallback list for the tlock-js bundle. We try jsdelivr first
+   (most-cached and CORS-friendly), then esm.sh, then unpkg. As long
+   as one resolves we are fine. */
+const TLOCK_CDNS = [
+  'https://cdn.jsdelivr.net/npm/tlock-js@0.9.0/+esm',
+  'https://esm.sh/tlock-js@0.9.0',
+  'https://unpkg.com/tlock-js@0.9.0?module',
+];
+const QRCODE_CDNS = [
+  'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm',
+  'https://esm.sh/qrcode@1.5.3',
+];
+
+async function tryImport(urls) {
+  let lastErr;
+  for (const url of urls) {
+    try {
+      const mod = await import(/* @vite-ignore */ url);
+      return mod;
+    } catch (err) {
+      console.warn('[wtu] CDN failed:', url, err && err.message);
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error('No CDN responded');
+}
+
 let _tlockPromise = null;
 function loadTlock() {
   if (!_tlockPromise) {
-    _tlockPromise = import('https://esm.sh/tlock-js@0.9.0').then((mod) => {
+    _tlockPromise = (async () => {
+      const mod = await tryImport(TLOCK_CDNS);
+      if (!mod || typeof mod.HttpChainClient !== 'function') {
+        throw new Error('tlock module missing expected exports');
+      }
       const client = new mod.HttpChainClient(
         new mod.HttpCachingChain(QUICKNET_URL, QUICKNET_CHAIN_INFO)
       );
       return { mod, client };
+    })().catch((err) => {
+      // Reset so a retry click can try again
+      _tlockPromise = null;
+      throw err;
     });
   }
   return _tlockPromise;
@@ -37,7 +69,10 @@ function loadTlock() {
 let _qrPromise = null;
 function loadQrLib() {
   if (!_qrPromise) {
-    _qrPromise = import('https://esm.sh/qrcode@1.5.3').then((m) => m.default);
+    _qrPromise = tryImport(QRCODE_CDNS).then((m) => m.default || m).catch((err) => {
+      _qrPromise = null;
+      throw err;
+    });
   }
   return _qrPromise;
 }
@@ -151,13 +186,13 @@ async function tlockDecryptPin(ciphertext) {
 
 function describeDrandError(err) {
   const msg = (err && err.message) || String(err);
-  if (/network|fetch|Failed to fetch|HTTP|module|import/i.test(msg)) {
-    return 'No pude cargar el módulo de cifrado. Verificá tu conexión y reintentá.';
-  }
   if (/round|beacon|signature/i.test(msg)) {
     return 'Falta poquito para que se abra. Esperá unos segundos y reintentá.';
   }
-  return 'Algo salió mal. Probá de nuevo.';
+  if (/network|fetch|Failed to fetch|HTTP|module|import|CDN/i.test(msg)) {
+    return 'No pude descargar la librería de cifrado. Probá de nuevo en un minuto, o reintentá desde otra red.';
+  }
+  return `Algo salió mal: ${msg.slice(0, 100)}`;
 }
 
 /* =========================================================
