@@ -41,7 +41,7 @@
 
     <section class="card" id="save-section" hidden>
       <h2>2. Bloquear hasta...</h2>
-      <p class="muted">El PIN recién generado todavía vive solo en memoria. Si lo guardás, podrás recuperarlo cuando se cumpla la condición.</p>
+      <p class="muted">El PIN recién generado todavía vive solo en memoria. Si lo guardás, se cifra con drand timelock contra una ronda futura: solo será descifrable cuando la red publique la firma de esa ronda.</p>
 
       <div class="form-row">
         <label for="pin-label">Etiqueta (opcional)</label>
@@ -90,12 +90,15 @@
 
     <footer class="footer">
       <p>
-        <strong>100% local.</strong> Nada sale de tu navegador: los PINs se guardan ofuscados en
-        <code>localStorage</code>. Esta app es voluntaria: si abrís las herramientas de desarrollador
-        podés leer el contenido. El bloqueo es contra vos mismo, no contra un atacante.
+        <strong>Bloqueo criptográfico real.</strong> Los PINs se cifran con
+        <a href="https://drand.love" target="_blank" rel="noopener">drand timelock</a>
+        (chain <code>quicknet</code>): la clave para descifrar <em>no existe</em> hasta que la red drand
+        publique la ronda futura correspondiente. Ni vos ni nadie puede abrir el ciphertext antes de tiempo,
+        ni siquiera abriendo DevTools o cambiando el reloj del sistema.
       </p>
       <p class="muted">
-        Aleatoriedad criptográfica vía <code>crypto.getRandomValues</code>.
+        Sin backend, sin cuentas, sin telemetría. Aleatoriedad por <code>crypto.getRandomValues</code>.
+        Ciphertexts en <code>localStorage</code>. Para descifrar se contacta <code>api.drand.sh</code>.
       </p>
     </footer>
   </main>
@@ -120,6 +123,6 @@
     </li>
   </template>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>

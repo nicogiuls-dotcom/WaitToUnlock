@@ -10,11 +10,18 @@ Webapp gratuita y 100% local para generar un PIN aleatorio de Screen Time (iOS) 
 4. Si querés recuperarlo después, guardalo bloqueado con una fecha de desbloqueo (atajos: +15min, +1h, +1d, +7d, +30d, o fecha exacta).
 5. Cuando se cumpla la fecha, podés revelar o volver a copiar el PIN.
 
-## Privacidad
+## Privacidad y bloqueo
 
-- Sin backend, sin telemetría. Todo corre en tu navegador.
-- Los PINs guardados quedan en `localStorage`, ofuscados (Base64 + reverso). **No es cifrado real**: si abrís DevTools podés leerlos. El bloqueo es contra vos mismo, no contra un atacante.
+- Sin backend, sin cuentas, sin telemetría. La app es estática.
+- Los PINs guardados se cifran con [drand timelock](https://drand.love) (chain `quicknet`, IBE sobre BLS12-381). La clave para descifrar **no existe** hasta que la red drand publica la firma de la ronda elegida.
+  - Cifrado: 100% offline, usa la clave pública de quicknet.
+  - Descifrado: necesita conexión a `api.drand.sh` para traer la firma de la ronda.
+- Cambiar el reloj del sistema, abrir DevTools o editar `localStorage` no te ayuda: matemáticamente la clave todavía no existe.
 - Aleatoriedad por `crypto.getRandomValues`.
+
+## Dependencias
+
+- [`tlock-js`](https://github.com/drand/tlock-js) cargado por ESM desde `esm.sh`. No hay paso de build.
 
 ## Deploy gratis con GitHub Pages
 
