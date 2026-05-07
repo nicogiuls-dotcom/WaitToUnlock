@@ -5,74 +5,29 @@ const STORE_KEY = 'wtu.pins.v2';
 const REVEAL_TIMEOUT_MS = 30_000;
 const $ = (id) => document.getElementById(id);
 
-const QUICKNET_CHAIN_INFO = {
-  public_key:
-    '83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a',
-  period: 3,
-  genesis_time: 1692803367,
-  hash: '52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971',
-  groupHash: 'f477d5c89f21a17c863a7f937c6a6d15859414d2be09cd448d4279af331c5d3e',
-  schemeID: 'bls-unchained-g1-rfc9380',
-  metadata: { beaconID: 'quicknet' },
-};
-const QUICKNET_URL =
-  'https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971';
-
-/* CDN fallback list for the tlock-js bundle. We try jsdelivr first
-   (most-cached and CORS-friendly), then esm.sh, then unpkg. As long
-   as one resolves we are fine. */
-const TLOCK_CDNS = [
-  'https://cdn.jsdelivr.net/npm/tlock-js@0.9.0/+esm',
-  'https://esm.sh/tlock-js@0.9.0',
-  'https://unpkg.com/tlock-js@0.9.0?module',
-];
-const QRCODE_CDNS = [
-  'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm',
-  'https://esm.sh/qrcode@1.5.3',
-];
-
-async function tryImport(urls) {
-  let lastErr;
-  for (const url of urls) {
-    try {
-      const mod = await import(/* @vite-ignore */ url);
-      return mod;
-    } catch (err) {
-      console.warn('[wtu] CDN failed:', url, err && err.message);
-      lastErr = err;
-    }
-  }
-  throw lastErr || new Error('No CDN responded');
-}
-
-let _tlockPromise = null;
-function loadTlock() {
-  if (!_tlockPromise) {
-    _tlockPromise = (async () => {
-      const mod = await tryImport(TLOCK_CDNS);
-      if (!mod || typeof mod.HttpChainClient !== 'function') {
-        throw new Error('tlock module missing expected exports');
-      }
-      const client = new mod.HttpChainClient(
-        new mod.HttpCachingChain(QUICKNET_URL, QUICKNET_CHAIN_INFO)
-      );
-      return { mod, client };
-    })().catch((err) => {
-      // Reset so a retry click can try again
-      _tlockPromise = null;
+/* The crypto engine lives in its own file with a static import to
+   esm.sh so that any CDN failure rejects the dynamic import inside
+   loadEngine() instead of crashing the entire app at parse time. */
+let _enginePromise = null;
+function loadEngine() {
+  if (!_enginePromise) {
+    _enginePromise = import('./crypto-engine.js?v=20260507e').catch((err) => {
+      _enginePromise = null;
       throw err;
     });
   }
-  return _tlockPromise;
+  return _enginePromise;
 }
 
 let _qrPromise = null;
 function loadQrLib() {
   if (!_qrPromise) {
-    _qrPromise = tryImport(QRCODE_CDNS).then((m) => m.default || m).catch((err) => {
-      _qrPromise = null;
-      throw err;
-    });
+    _qrPromise = import('https://esm.sh/qrcode@1.5.3')
+      .then((m) => m.default)
+      .catch((err) => {
+        _qrPromise = null;
+        throw err;
+      });
   }
   return _qrPromise;
 }
@@ -172,16 +127,13 @@ function formatUnlockDate(ts) {
 }
 
 async function tlockEncryptPin(pin, unlockMs) {
-  const { mod, client } = await loadTlock();
-  const round = mod.roundAt(unlockMs, QUICKNET_CHAIN_INFO) + 1;
-  const ciphertext = await mod.timelockEncrypt(round, mod.Buffer.from(pin, 'utf-8'), client);
-  return { ciphertext, round };
+  const engine = await loadEngine();
+  return engine.encryptPin(pin, unlockMs);
 }
 
 async function tlockDecryptPin(ciphertext) {
-  const { mod, client } = await loadTlock();
-  const buf = await mod.timelockDecrypt(ciphertext, client);
-  return buf.toString('utf-8');
+  const engine = await loadEngine();
+  return engine.decryptPin(ciphertext);
 }
 
 function describeDrandError(err) {
