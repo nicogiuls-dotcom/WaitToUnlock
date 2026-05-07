@@ -164,6 +164,98 @@ function renderPins() {
 
     list.appendChild(node);
   }
+
+  $('export-btn').disabled = pins.length === 0;
+}
+
+function exportPins() {
+  const pins = loadPins();
+  if (pins.length === 0) {
+    setStatus('error', 'No hay PINs para exportar.');
+    return;
+  }
+  const payload = {
+    app: 'waittounlock',
+    version: 2,
+    exportedAt: Date.now(),
+    pins,
+  };
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `waittounlock-backup-${date}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  copyToClipboard(json)
+    .then(() => {
+      setStatus(
+        'info',
+        `Exportados ${pins.length} PIN(s). Archivo descargado y JSON copiado al portapapeles. Guardalo donde quieras: el contenido sigue cifrado por drand.`
+      );
+    })
+    .catch(() => {
+      setStatus(
+        'info',
+        `Exportados ${pins.length} PIN(s) en el archivo descargado.`
+      );
+    });
+}
+
+function importPinsFromJson(jsonStr) {
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    return { ok: false, error: 'JSON inválido. Revisá el formato.' };
+  }
+
+  let incoming;
+  if (Array.isArray(parsed)) {
+    incoming = parsed;
+  } else if (parsed && Array.isArray(parsed.pins)) {
+    incoming = parsed.pins;
+  } else {
+    return { ok: false, error: 'No encontré una lista de PINs en el JSON.' };
+  }
+
+  const valid = incoming.filter(
+    (p) => p && typeof p.id === 'string' && typeof p.ciphertext === 'string' && Number.isFinite(p.unlockAt)
+  );
+  if (valid.length === 0) {
+    return { ok: false, error: 'El JSON no contiene PINs con el formato esperado.' };
+  }
+
+  const existing = loadPins();
+  const existingIds = new Set(existing.map((p) => p.id));
+
+  let added = 0;
+  let skipped = 0;
+  for (const p of valid) {
+    if (existingIds.has(p.id)) {
+      skipped++;
+      continue;
+    }
+    existing.push({
+      id: p.id,
+      label: typeof p.label === 'string' ? p.label : '',
+      ciphertext: p.ciphertext,
+      round: Number.isFinite(p.round) ? p.round : 0,
+      length: Number.isFinite(p.length) ? p.length : 4,
+      unlockAt: p.unlockAt,
+      requireConfirm: p.requireConfirm !== false,
+      createdAt: Number.isFinite(p.createdAt) ? p.createdAt : Date.now(),
+    });
+    added++;
+  }
+
+  savePins(existing);
+  return { ok: true, added, skipped };
 }
 
 function describeDrandError(err) {
@@ -337,6 +429,56 @@ $('pin-list').addEventListener('click', async (e) => {
       alert(describeDrandError(err));
     }
   }
+});
+
+$('export-btn').addEventListener('click', exportPins);
+
+$('import-btn').addEventListener('click', () => {
+  $('import-text').value = '';
+  $('import-file').value = '';
+  const status = $('import-status');
+  status.className = 'status';
+  status.textContent = '';
+  $('import-dialog').showModal();
+});
+
+$('import-file').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    $('import-text').value = text;
+  } catch {
+    const status = $('import-status');
+    status.className = 'status error';
+    status.textContent = 'No pude leer el archivo.';
+  }
+});
+
+$('import-confirm-btn').addEventListener('click', () => {
+  const json = $('import-text').value.trim();
+  const status = $('import-status');
+  if (!json) {
+    status.className = 'status error';
+    status.textContent = 'Pegá un JSON o subí un archivo.';
+    return;
+  }
+  const result = importPinsFromJson(json);
+  if (!result.ok) {
+    status.className = 'status error';
+    status.textContent = result.error;
+    return;
+  }
+  status.className = 'status success';
+  status.textContent =
+    `Importados ${result.added} PIN(s).` +
+    (result.skipped > 0 ? ` Omitidos ${result.skipped} duplicado(s) (mismo id).` : '');
+  renderPins();
+  setTimeout(() => $('import-dialog').close(), 1400);
+});
+
+$('import-cancel-btn').addEventListener('click', () => {
+  $('import-dialog').close();
 });
 
 $('clear-clipboard-btn').addEventListener('click', async () => {

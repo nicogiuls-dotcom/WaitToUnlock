@@ -83,9 +83,20 @@
       <h2>PINs guardados</h2>
       <p id="empty-state" class="muted">Todavía no guardaste ningún PIN bloqueado.</p>
       <ul id="pin-list" class="pin-list"></ul>
-      <div class="actions" id="bulk-actions" hidden>
+      <div class="actions bulk-actions">
+        <button id="export-btn" class="btn btn-secondary">Exportar respaldo</button>
+        <button id="import-btn" class="btn btn-secondary">Importar respaldo</button>
         <button id="clear-clipboard-btn" class="btn btn-ghost">Limpiar portapapeles</button>
       </div>
+      <details class="hint-block">
+        <summary>¿Por qué es seguro exportar?</summary>
+        <p>
+          Los PINs ya están cifrados con drand timelock. El archivo o JSON exportado podés guardarlo
+          en iCloud Drive, Google Drive, mail a vos mismo, Notes, Telegram, etc. Hasta que la red drand
+          publique la ronda correspondiente, ese contenido no le sirve a nadie — ni a vos, ni al servicio
+          donde lo guardes.
+        </p>
+      </details>
     </section>
 
     <footer class="footer">
@@ -102,6 +113,28 @@
       </p>
     </footer>
   </main>
+
+  <dialog id="import-dialog" class="dialog">
+    <h3>Importar PINs</h3>
+    <p class="muted">Subí un archivo <code>.json</code> exportado desde otro dispositivo, o pegá el contenido directamente.</p>
+
+    <div class="form-row">
+      <label for="import-file">Desde archivo</label>
+      <input type="file" id="import-file" accept=".json,application/json">
+    </div>
+
+    <div class="form-row">
+      <label for="import-text">O pegá el JSON</label>
+      <textarea id="import-text" rows="6" spellcheck="false" placeholder='{"app":"waittounlock","version":2,"pins":[...]}'></textarea>
+    </div>
+
+    <p id="import-status" class="status" aria-live="polite" role="status"></p>
+
+    <div class="actions">
+      <button type="button" id="import-confirm-btn" class="btn btn-primary">Importar</button>
+      <button type="button" id="import-cancel-btn" class="btn btn-ghost">Cancelar</button>
+    </div>
+  </dialog>
 
   <template id="pin-item-template">
     <li class="pin-item">
