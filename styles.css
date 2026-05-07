@@ -80,6 +80,7 @@ html, body {
   background: var(--bg-0);
   -webkit-font-smoothing: antialiased;
   -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -89,7 +90,11 @@ body {
     var(--bg-0);
   min-height: 100vh;
   min-height: 100dvh;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
 }
+
+button { -webkit-tap-highlight-color: transparent; }
 
 a {
   color: var(--primary);
@@ -130,11 +135,18 @@ a:hover, a:focus-visible {
 .container {
   max-width: 720px;
   margin: 0 auto;
-  padding: 32px 20px 80px;
+  padding: 32px 20px calc(80px + env(safe-area-inset-bottom));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
 }
 
 @media (max-width: 520px) {
-  .container { padding: 20px 16px 60px; }
+  .container {
+    padding-top: 20px;
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+  }
 }
 
 /* =========================
@@ -142,13 +154,13 @@ a:hover, a:focus-visible {
    ========================= */
 .hero {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
 }
 
 .hero-icon {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 14px;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 12px;
   filter: drop-shadow(0 8px 20px rgba(126, 141, 255, 0.28));
 }
 
@@ -158,8 +170,8 @@ a:hover, a:focus-visible {
 }
 
 .hero h1 {
-  font-size: 2rem;
-  margin: 0 0 10px;
+  font-size: 1.75rem;
+  margin: 0 0 8px;
   letter-spacing: -0.025em;
   font-weight: 700;
 }
@@ -168,7 +180,15 @@ a:hover, a:focus-visible {
   color: var(--text-muted);
   margin: 0 auto;
   max-width: 540px;
-  font-size: 1rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+@media (min-width: 600px) {
+  .hero { margin-bottom: 28px; }
+  .hero-icon { width: 64px; height: 64px; margin-bottom: 14px; }
+  .hero h1 { font-size: 2rem; margin-bottom: 10px; }
+  .subtitle { font-size: 1rem; }
 }
 
 .subtitle strong {
@@ -181,11 +201,11 @@ a:hover, a:focus-visible {
    ========================= */
 .stepper {
   list-style: none;
-  margin: 0 0 24px;
-  padding: 8px;
+  margin: 0 0 20px;
+  padding: 6px;
   display: flex;
   justify-content: center;
-  gap: 4px;
+  gap: 2px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -193,6 +213,7 @@ a:hover, a:focus-visible {
   overflow-x: auto;
   -ms-overflow-style: none;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 .stepper::-webkit-scrollbar { display: none; }
@@ -201,10 +222,17 @@ a:hover, a:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
+  padding: 6px 12px;
   border-radius: 999px;
   color: var(--text-faint);
   white-space: nowrap;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 380px) {
+  .stepper-item { padding: 6px 10px; gap: 6px; font-size: 0.78rem; }
+  .stepper-label { display: none; }
+  .stepper-item.is-active .stepper-label { display: inline; }
 }
 
 .stepper-item.is-active {
@@ -237,12 +265,16 @@ a:hover, a:focus-visible {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 24px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   box-shadow: var(--shadow);
 }
 
 @media (max-width: 520px) {
-  .card { padding: 18px; border-radius: var(--radius); }
+  .card {
+    padding: 18px 16px;
+    border-radius: var(--radius);
+    margin-bottom: 14px;
+  }
 }
 
 .card-header {
@@ -271,6 +303,12 @@ a:hover, a:focus-visible {
   color: var(--primary);
   font-weight: 700;
   font-size: 0.95rem;
+  margin-top: 2px;
+}
+
+@media (max-width: 380px) {
+  .card-header { gap: 10px; }
+  .card-num { width: 28px; height: 28px; font-size: 0.85rem; border-radius: 8px; }
 }
 
 .card h2 {
@@ -334,15 +372,30 @@ input[type="datetime-local"],
 select,
 textarea {
   width: 100%;
-  padding: 11px 14px;
+  padding: 12px 14px;
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  font-size: 1rem;
+  /* 16px exact prevents iOS Safari zoom-on-focus. */
+  font-size: 16px;
   font-family: inherit;
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+select {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%239aa3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1l5 5 5-5'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 8px;
+  padding-right: 38px;
+}
+
+input[type="datetime-local"] {
+  min-height: 44px;
 }
 
 input[type="text"]:hover,
@@ -362,16 +415,18 @@ textarea:focus-visible {
 
 textarea {
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  /* iOS Safari zooms inputs <16px; keep at 16px and reduce visual via line-height. */
+  font-size: 16px;
   resize: vertical;
   min-height: 110px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 input[type="file"] {
-  font-size: 0.92rem;
+  font-size: 16px;
   color: var(--text);
   padding: 6px 0;
+  max-width: 100%;
 }
 
 input[type="file"]::file-selector-button {
@@ -394,15 +449,17 @@ input[type="file"]::file-selector-button:hover {
 .checkbox-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   font-size: 0.95rem;
   color: var(--text);
   cursor: pointer;
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   transition: border-color 0.15s, background 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .checkbox-row:hover {
@@ -410,15 +467,21 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .checkbox-row input {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
   accent-color: var(--primary);
   flex-shrink: 0;
 }
 
+.checkbox-row > span {
+  flex: 1;
+  min-width: 0;
+}
+
 .checkbox-row .form-hint {
   margin-top: 4px;
+  display: block;
 }
 
 /* =========================
@@ -599,6 +662,9 @@ input[type="file"]::file-selector-button:hover {
   align-items: center;
   gap: 8px;
   user-select: none;
+  -webkit-user-select: none;
+  padding: 6px 0;
+  min-height: 36px;
 }
 
 .hint-block summary::-webkit-details-marker { display: none; }
@@ -725,6 +791,11 @@ input[type="file"]::file-selector-button:hover {
   font-size: 1rem;
   margin: 0;
   color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
 }
 
 .pin-status-pill {
@@ -783,7 +854,7 @@ input[type="file"]::file-selector-button:hover {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px 14px;
   padding: 14px 16px;
   background: var(--bg-1);
   border: 1px dashed var(--primary);
@@ -791,30 +862,48 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .pin-revealed-label {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
+  flex-basis: 100%;
 }
 
 .pin-revealed-value {
   font-family: var(--font-mono);
-  font-size: 1.5rem;
-  letter-spacing: 0.32em;
+  font-size: 1.7rem;
+  letter-spacing: 0.22em;
   color: var(--text);
-  flex: 1;
-  font-weight: 600;
+  flex: 1 1 auto;
+  font-weight: 700;
+  text-align: center;
+  padding-left: 0.22em;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.action-hide {
+  flex: 0 0 auto;
+}
+
+@media (min-width: 480px) {
+  .pin-revealed-label { flex-basis: auto; }
+  .pin-revealed-value { font-size: 1.5rem; letter-spacing: 0.3em; text-align: left; }
 }
 
 .pin-actions {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: stretch;
 }
 
-.pin-actions .btn { flex: 1 1 auto; min-width: 100px; }
+.pin-actions .action-reveal,
+.pin-actions .action-copy {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
+}
 
 .action-delete {
-  flex: 0 0 auto !important;
-  min-width: auto !important;
+  flex: 1 1 100%;
   color: var(--text-faint);
 }
 
@@ -823,9 +912,10 @@ input[type="file"]::file-selector-button:hover {
   background: var(--danger-soft);
 }
 
-@media (max-width: 520px) {
-  .pin-actions { gap: 6px; }
-  .pin-actions .btn { min-width: 80px; }
+@media (min-width: 480px) {
+  .pin-actions .action-reveal,
+  .pin-actions .action-copy { flex: 1 1 auto; min-width: 110px; }
+  .action-delete { flex: 0 0 auto; min-width: auto; padding-left: 14px; padding-right: 14px; }
 }
 
 /* =========================
@@ -840,8 +930,14 @@ input[type="file"]::file-selector-button:hover {
   border-top: 1px solid var(--border);
 }
 
+.bulk-actions .btn { flex: 1 1 auto; }
+
 @media (max-width: 520px) {
-  .bulk-actions { flex-direction: column; }
+  .bulk-actions {
+    flex-direction: column;
+    margin-top: 14px;
+    padding-top: 14px;
+  }
   .bulk-actions .btn { width: 100%; }
 }
 
@@ -918,11 +1014,24 @@ input[type="file"]::file-selector-button:hover {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 24px;
+  padding: 22px;
   max-width: 520px;
-  width: calc(100% - 32px);
+  width: calc(100% - 24px);
+  max-height: calc(100dvh - 80px);
+  max-height: -webkit-fill-available;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--shadow-lg);
   font-family: inherit;
+  margin: auto;
+}
+
+@media (max-width: 520px) {
+  .dialog {
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+    border-radius: var(--radius);
+    max-height: calc(100dvh - 32px);
+  }
 }
 
 .dialog::backdrop {
@@ -970,7 +1079,7 @@ input[type="file"]::file-selector-button:hover {
    ========================= */
 .toast {
   position: fixed;
-  bottom: max(20px, env(safe-area-inset-bottom));
+  bottom: max(20px, calc(env(safe-area-inset-bottom) + 12px));
   left: 50%;
   transform: translateX(-50%) translateY(20px);
   background: var(--surface);
