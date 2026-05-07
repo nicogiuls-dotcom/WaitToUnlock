@@ -1,12 +1,3 @@
-import {
-  timelockEncrypt,
-  timelockDecrypt,
-  HttpChainClient,
-  HttpCachingChain,
-  roundAt,
-  Buffer,
-} from 'https://esm.sh/tlock-js@0.9.0';
-
 /* =========================================================
    Constants
    ========================================================= */
@@ -27,8 +18,29 @@ const QUICKNET_CHAIN_INFO = {
 const QUICKNET_URL =
   'https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971';
 
-const drandChain = new HttpCachingChain(QUICKNET_URL, QUICKNET_CHAIN_INFO);
-const drandClient = new HttpChainClient(drandChain);
+/* Lazy load tlock-js so that the UI boots independently of the
+   esm.sh CDN. If the import fails the page is still usable, and
+   only encrypt/decrypt actions surface the network error. */
+let _tlockPromise = null;
+function loadTlock() {
+  if (!_tlockPromise) {
+    _tlockPromise = import('https://esm.sh/tlock-js@0.9.0').then((mod) => {
+      const client = new mod.HttpChainClient(
+        new mod.HttpCachingChain(QUICKNET_URL, QUICKNET_CHAIN_INFO)
+      );
+      return { mod, client };
+    });
+  }
+  return _tlockPromise;
+}
+
+let _qrPromise = null;
+function loadQrLib() {
+  if (!_qrPromise) {
+    _qrPromise = import('https://esm.sh/qrcode@1.5.3').then((m) => m.default);
+  }
+  return _qrPromise;
+}
 
 /* =========================================================
    State
@@ -124,30 +136,28 @@ function formatUnlockDate(ts) {
   return d.toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function roundForUnlockTime(unlockMs) {
-  return roundAt(unlockMs, QUICKNET_CHAIN_INFO) + 1;
-}
-
 async function tlockEncryptPin(pin, unlockMs) {
-  const round = roundForUnlockTime(unlockMs);
-  const ciphertext = await timelockEncrypt(round, Buffer.from(pin, 'utf-8'), drandClient);
+  const { mod, client } = await loadTlock();
+  const round = mod.roundAt(unlockMs, QUICKNET_CHAIN_INFO) + 1;
+  const ciphertext = await mod.timelockEncrypt(round, mod.Buffer.from(pin, 'utf-8'), client);
   return { ciphertext, round };
 }
 
 async function tlockDecryptPin(ciphertext) {
-  const buf = await timelockDecrypt(ciphertext, drandClient);
+  const { mod, client } = await loadTlock();
+  const buf = await mod.timelockDecrypt(ciphertext, client);
   return buf.toString('utf-8');
 }
 
 function describeDrandError(err) {
   const msg = (err && err.message) || String(err);
-  if (/network|fetch|Failed to fetch|HTTP/i.test(msg)) {
-    return 'No tengo internet. Conectate y volvé a intentar.';
+  if (/network|fetch|Failed to fetch|HTTP|module|import/i.test(msg)) {
+    return 'No pude cargar el módulo de cifrado. Verificá tu conexión y reintentá.';
   }
   if (/round|beacon|signature/i.test(msg)) {
     return 'Falta poquito para que se abra. Esperá unos segundos y reintentá.';
   }
-  return 'Algo salió mal al abrir la caja. Probá de nuevo.';
+  return 'Algo salió mal. Probá de nuevo.';
 }
 
 /* =========================================================
@@ -496,13 +506,6 @@ function buildShareUrl(pin) {
   const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(minimal))));
   const base = `${window.location.origin}${window.location.pathname}`;
   return `${base}#i=${encoded}`;
-}
-
-let qrLib = null;
-async function loadQrLib() {
-  if (qrLib) return qrLib;
-  qrLib = (await import('https://esm.sh/qrcode@1.5.3')).default;
-  return qrLib;
 }
 
 async function openShareDialog(pinId) {
